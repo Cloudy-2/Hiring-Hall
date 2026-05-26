@@ -41,7 +41,7 @@ class JobPostingController extends Controller
         $user = $request->user();
         $savedJobIds = [];
 
-        if ($user && $user->role === 'applicant') {
+        if ($user && $user->isApplicant()) {
             $savedJobIds = SavedJob::where('user_id', $user->id)
                 ->pluck('job_posting_id')
                 ->all();
@@ -165,8 +165,8 @@ class JobPostingController extends Controller
 
         $hasMore = ($page * $perPage) < $total;
 
-        // AJAX infinite-scroll request — return JSON
-        if ($request->ajax()) {
+        // AJAX infinite-scroll request — return JSON (but not Inertia navigation)
+        if ($request->ajax() && !$request->header('X-Inertia')) {
             return response()->json([
                 'jobs' => $jobsCollection->values(),
                 'hasMore' => $hasMore,
@@ -211,7 +211,7 @@ class JobPostingController extends Controller
         $isJobClosed = $job->status === 'closed';
 
         if ($user) {
-            if ($user->role === 'applicant') {
+            if ($user->isApplicant()) {
                 $isCandidate = true;
             } elseif ($user->role === 'employer') {
                 $isEmployer = true;

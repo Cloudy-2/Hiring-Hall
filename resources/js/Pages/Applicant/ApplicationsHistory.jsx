@@ -1,6 +1,6 @@
 import { Head, Link, router } from "@inertiajs/react";
 import { useState } from "react";
-import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import CandidateLayout from "@/Layouts/CandidateLayout";
 
 export default function ApplicationsHistory({
     auth,
@@ -42,7 +42,7 @@ export default function ApplicationsHistory({
     };
 
     return (
-        <AuthenticatedLayout user={auth.user}>
+        <CandidateLayout user={auth.user}>
             <Head title="Application History" />
 
             <div className="py-6">
@@ -357,6 +357,6 @@ export default function ApplicationsHistory({
                     </div>
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </CandidateLayout>
     );
 }

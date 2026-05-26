@@ -24,7 +24,7 @@ class EnsureOnboardingComplete
         $user = $request->user();
 
         // Only apply to candidate role
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             return $next($request);
         }
 

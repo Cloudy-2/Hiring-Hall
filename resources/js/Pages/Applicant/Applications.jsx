@@ -1,6 +1,6 @@
 import { Head, Link, router } from "@inertiajs/react";
 import { useState } from "react";
-import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import CandidateLayout from "@/Layouts/CandidateLayout";
 
 export default function Applications({
     auth,
@@ -103,7 +103,7 @@ export default function Applications({
     };
 
     return (
-        <AuthenticatedLayout user={auth.user}>
+        <CandidateLayout user={auth.user}>
             <Head title="My Applications" />
 
             <div className="py-6">
@@ -578,6 +578,6 @@ export default function Applications({
                     </div>
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </CandidateLayout>
     );
 }

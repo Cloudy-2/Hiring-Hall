@@ -47,7 +47,7 @@ class User extends Authenticatable implements MustVerifyEmail, WirechatUser
      */
     public function canCreateChats(): bool
     {
-        return $this->role !== 'applicant';
+        return ! $this->isApplicant();
     }
 
     /**
@@ -56,7 +56,7 @@ class User extends Authenticatable implements MustVerifyEmail, WirechatUser
      */
     public function canCreateGroups(): bool
     {
-        return $this->role !== 'applicant';
+        return ! $this->isApplicant();
     }
 
     /**
@@ -64,7 +64,9 @@ class User extends Authenticatable implements MustVerifyEmail, WirechatUser
      */
     public function isApplicant(): bool
     {
-        return $this->role === 'applicant';
+        $role = strtolower((string) $this->role);
+
+        return $role === '' || $role === 'applicant' || $role === 'candidate';
     }
 
     /**

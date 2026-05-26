@@ -85,7 +85,7 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
      */
     protected function syncApplicantLocationFromAddress(User $user, array $input): void
     {
-        if ($user->role !== 'applicant') {
+        if (! $user->isApplicant()) {
             return;
         }
 

@@ -16,7 +16,7 @@ class ApplicantPanelController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             abort(403);
         }
 
@@ -70,7 +70,7 @@ class ApplicantPanelController extends Controller
     public function getQuickStats(Request $request)
     {
         $user = $request->user();
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             return response()->json([], 403);
         }
 
@@ -129,6 +129,8 @@ class ApplicantPanelController extends Controller
             $recommendedJobs = $recommendedJobs->merge($additionalJobs);
         }
         $savedJobIds = SavedJob::where('user_id', $user->id)->pluck('job_posting_id')->all();
+        $allLocations = $recommendedJobs->pluck('location')->filter()->unique()->values();
+        $allJobTypes = $recommendedJobs->pluck('employment_type')->filter()->unique()->values();
 
         return \Inertia\Inertia::render('Applicant/RecommendedJobs', [
             'user' => $user,

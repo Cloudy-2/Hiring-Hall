@@ -10,7 +10,7 @@ class CandidateOnly
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->user() || $request->user()->role !== 'applicant') {
+        if (! $request->user() || ! $request->user()->isApplicant()) {
             // Redirect employers to their dashboard
             if ($request->user() && $request->user()->role === 'employer') {
                 return redirect()->route('employer.dashboard')->with('error', 'This page is for candidates only.');

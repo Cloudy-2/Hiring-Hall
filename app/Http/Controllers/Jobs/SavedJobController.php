@@ -15,7 +15,7 @@ class SavedJobController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             abort(403);
         }
 
@@ -60,7 +60,7 @@ class SavedJobController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             abort(403);
         }
 
@@ -81,7 +81,7 @@ class SavedJobController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             abort(403);
         }
 

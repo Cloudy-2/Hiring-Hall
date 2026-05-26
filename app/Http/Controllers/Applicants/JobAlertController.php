@@ -13,7 +13,7 @@ class JobAlertController extends Controller
     protected function ensureCandidate(Request $request)
     {
         $user = $request->user();
-        if (! $user || $user->role !== 'applicant') {
+        if (! $user || ! $user->isApplicant()) {
             abort(403);
         }
 
@@ -30,7 +30,7 @@ class JobAlertController extends Controller
 
         $dropdownOptions = $this->getDropdownOptions();
 
-        return view('applicants.job-alerts.index', [
+        return \Inertia\Inertia::render('Applicant/JobAlerts/Index', [
             'alerts' => $alerts,
             'dropdownOptions' => $dropdownOptions,
         ]);
@@ -41,7 +41,7 @@ class JobAlertController extends Controller
         $this->ensureCandidate($request);
         $dropdownOptions = $this->getDropdownOptions();
 
-        return view('applicants.job-alerts.create', [
+        return \Inertia\Inertia::render('Applicant/JobAlerts/Create', [
             'dropdownOptions' => $dropdownOptions,
         ]);
     }
@@ -95,7 +95,7 @@ class JobAlertController extends Controller
 
         $jobs = $query->latest('posted_at')->paginate(12)->withQueryString();
 
-        return view('applicants.job-alerts.show', [
+        return \Inertia\Inertia::render('Applicant/JobAlerts/Show', [
             'alert' => $jobAlert,
             'jobs' => $jobs,
             'slugs' => $slugs,
@@ -129,7 +129,7 @@ class JobAlertController extends Controller
         JobAlertPreference::create($validated);
 
         return redirect()
-            ->route('applicant.job-alerts.index')
+            ->route('candidate.job-alerts.index')
             ->with('status', 'Job alert created successfully.');
     }
 
@@ -142,7 +142,7 @@ class JobAlertController extends Controller
 
         $dropdownOptions = $this->getDropdownOptions();
 
-        return view('applicants.job-alerts.edit', [
+        return \Inertia\Inertia::render('Applicant/JobAlerts/Edit', [
             'alert' => $jobAlert,
             'dropdownOptions' => $dropdownOptions,
         ]);
@@ -179,7 +179,7 @@ class JobAlertController extends Controller
         $jobAlert->update($validated);
 
         return redirect()
-            ->route('applicant.job-alerts.index')
+            ->route('candidate.job-alerts.index')
             ->with('status', 'Job alert updated successfully.');
     }
 
@@ -193,7 +193,7 @@ class JobAlertController extends Controller
         $jobAlert->delete();
 
         return redirect()
-            ->route('applicant.job-alerts.index')
+            ->route('candidate.job-alerts.index')
             ->with('status', 'Job alert deleted.');
     }
 

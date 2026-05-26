@@ -1,5 +1,5 @@
 import { Head, Link } from "@inertiajs/react";
-import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import CandidateLayout from "@/Layouts/CandidateLayout";
 
 export default function Dashboard({
     auth,
@@ -43,7 +43,7 @@ export default function Dashboard({
     };
 
     return (
-        <AuthenticatedLayout user={auth.user}>
+        <CandidateLayout user={auth.user}>
             <Head title="Dashboard" />
 
             <div className="py-6">
@@ -472,6 +472,6 @@ export default function Dashboard({
                     )}
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </CandidateLayout>
     );
 }
