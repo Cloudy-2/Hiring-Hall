@@ -1,0 +1,578 @@
+openapi: 3.1.0
+info:
+  title: Hiring Hall API
+  version: "1.0"
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    ApiSuccess:
+      type: object
+      required: [success, message, data]
+      properties:
+        success: { type: boolean, const: true }
+        message: { type: string }
+        data: {}
+    ApiError:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean, const: false }
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer, maximum: 100 }
+        total: { type: integer }
+        last_page: { type: integer }
+        from: { type: integer, nullable: true }
+        to: { type: integer, nullable: true }
+  responses:
+    Ok:
+      description: Success envelope.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiSuccess" }
+    Error:
+      description: Error envelope.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+paths:
+  /auth/register/applicant:
+    post:
+      security: []
+      summary: Register applicant
+      responses:
+        {
+          "201": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /auth/register/employer:
+    post:
+      security: []
+      summary: Register employer
+      responses:
+        {
+          "201": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /auth/login:
+    post:
+      security: []
+      summary: Login
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /auth/forgot-password:
+    post:
+      security: []
+      summary: Send password reset link
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "400": { $ref: "#/components/responses/Error" },
+        }
+  /auth/reset-password:
+    post:
+      security: []
+      summary: Reset password
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "400": { $ref: "#/components/responses/Error" },
+        }
+  /auth/logout:
+    post:
+      summary: Logout
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "401": { $ref: "#/components/responses/Error" },
+        }
+  /me:
+    get:
+      summary: Current user
+      responses: { "200": { $ref: "#/components/responses/Ok" } }
+  /me/password:
+    put:
+      summary: Change password
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /me/notifications:
+    get:
+      summary: Notification count
+      responses: { "200": { $ref: "#/components/responses/Ok" } }
+  /dropdowns/{type}:
+    get:
+      summary: Dropdown options
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              [
+                skills,
+                categories,
+                job_types,
+                employment_types,
+                remote_types,
+                work_modes,
+                industries,
+                languages,
+                degrees,
+                currencies,
+              ]
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /applicant/profile:
+    get:
+      {
+        summary: Applicant profile,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    put:
+      {
+        summary: Update applicant profile,
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/profile/professional:
+    put:
+      {
+        summary: Update professional profile,
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/profile/photo:
+    post:
+      summary: Upload profile photo
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { photo: { type: string, format: binary } }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /applicant/profile/cv:
+    post:
+      summary: Upload CV
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { cv: { type: string, format: binary } }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /applicant/onboarding:
+    get:
+      {
+        summary: Applicant onboarding,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    post:
+      {
+        summary: Advance applicant onboarding,
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/jobs:
+    get:
+      {
+        summary: Browse jobs,
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/jobs/saved:
+    get:
+      {
+        summary: Saved jobs,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /applicant/jobs/{slug}:
+    get:
+      summary: Job detail
+      parameters:
+        [{ name: slug, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "404": { $ref: "#/components/responses/Error" },
+        }
+  /applicant/jobs/{slug}/save:
+    post:
+      summary: Toggle saved job
+      parameters:
+        [{ name: slug, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/Ok" } }
+  /applicant/applications:
+    get:
+      {
+        summary: Applicant applications,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    post:
+      {
+        summary: Submit application,
+        responses:
+          {
+            "201": { $ref: "#/components/responses/Ok" },
+            "409": { $ref: "#/components/responses/Error" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/applications/{id}:
+    get:
+      {
+        summary: Application detail,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "404": { $ref: "#/components/responses/Error" },
+          },
+      }
+    delete:
+      {
+        summary: Withdraw application,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/interviews:
+    get:
+      {
+        summary: Applicant interviews,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /applicant/interviews/{id}:
+    get:
+      {
+        summary: Applicant interview detail,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "404": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /applicant/notifications:
+    get:
+      {
+        summary: Applicant notifications,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /applicant/notifications/{id}/read:
+    put:
+      {
+        summary: Mark notification read,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: string } }],
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /applicant/notifications/read-all:
+    post:
+      {
+        summary: Mark all notifications read,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/company:
+    get:
+      {
+        summary: Company profile,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    put:
+      {
+        summary: Update company profile,
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/company/logo:
+    post:
+      summary: Upload company logo
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { logo: { type: string, format: binary } }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/Ok" },
+          "422": { $ref: "#/components/responses/Error" },
+        }
+  /employer/onboarding:
+    get:
+      {
+        summary: Employer onboarding,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    post:
+      {
+        summary: Advance employer onboarding,
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/jobs:
+    get:
+      {
+        summary: Employer jobs,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    post:
+      {
+        summary: Create employer job,
+        responses:
+          {
+            "201": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/jobs/{id}:
+    get:
+      {
+        summary: Employer job detail,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "404": { $ref: "#/components/responses/Error" },
+          },
+      }
+    put:
+      {
+        summary: Update employer job,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+    delete:
+      {
+        summary: Delete employer job,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/jobs/{id}/publish:
+    post:
+      {
+        summary: Publish job,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/jobs/{id}/close:
+    post:
+      {
+        summary: Close job,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/pipeline-stages:
+    get:
+      {
+        summary: Pipeline stages,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/applications:
+    get:
+      {
+        summary: Employer applications across all company jobs,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/jobs/{id}/applications:
+    get:
+      {
+        summary: Job applications,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "404": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/applications/{id}:
+    get:
+      {
+        summary: Employer application detail,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "404": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/applications/{id}/stage:
+    put:
+      {
+        summary: Move application stage,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/applications/{id}/notes:
+    put:
+      {
+        summary: Update application notes,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/interviews:
+    get:
+      {
+        summary: Employer interviews,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+    post:
+      {
+        summary: Schedule interview,
+        responses:
+          {
+            "201": { $ref: "#/components/responses/Ok" },
+            "403": { $ref: "#/components/responses/Error" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/interviews/{id}:
+    get:
+      {
+        summary: Employer interview detail,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "404": { $ref: "#/components/responses/Error" },
+          },
+      }
+    put:
+      {
+        summary: Update interview,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+    delete:
+      {
+        summary: Cancel interview,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/interviews/{id}/feedback:
+    post:
+      {
+        summary: Submit interview feedback,
+        parameters:
+          [{ name: id, in: path, required: true, schema: { type: integer } }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "422": { $ref: "#/components/responses/Error" },
+          },
+      }
+  /employer/saved-applicants:
+    get:
+      {
+        summary: Saved applicants,
+        responses: { "200": { $ref: "#/components/responses/Ok" } },
+      }
+  /employer/saved-applicants/{applicantId}:
+    post:
+      {
+        summary: Toggle saved applicant,
+        parameters:
+          [
+            {
+              name: applicantId,
+              in: path,
+              required: true,
+              schema: { type: integer },
+            },
+          ],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/Ok" },
+            "403": { $ref: "#/components/responses/Error" },
+          },
+      }

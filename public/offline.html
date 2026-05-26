@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline – HillBCS</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --primary: #6366f1;
+      --primary-light: #e0e7ff;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    /* ── Offline Banner ── */
+    .offline-banner {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #1e293b;
+      color: #f1f5f9;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      padding: 8px;
+      letter-spacing: 0.05em;
+      z-index: 100;
+    }
+    .offline-banner a {
+      color: #818cf8;
+      text-decoration: none;
+      margin-left: 8px;
+      font-weight: 700;
+    }
+
+    /* ── Game Wrapper ── */
+    .game-wrap {
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .brand-dot {
+      width: 28px;
+      height: 28px;
+      background: var(--primary);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .brand-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .headline {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    /* ── Score Bar ── */
+    .score-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .score-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .score-val { font-size: 18px; font-weight: 800; color: var(--primary); }
+    .score-lbl { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .combo-val { color: var(--warning); }
+    .streak-val { color: var(--success); }
+
+    /* ── Timer Bar ── */
+    .timer-wrap {
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .timer-bar {
+      height: 100%;
+      background: var(--primary);
+      width: 100%;
+      transition: width 0.1s linear, background 0.3s;
+      border-radius: 99px;
+    }
+    .timer-bar.danger { background: var(--danger); }
+
+    /* ── Candidate Card ── */
+    .card-stage {
+      position: relative;
+      height: 220px;
+      margin-bottom: 20px;
+    }
+
+    .candidate-card {
+      position: absolute;
+      inset: 0;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      text-align: left;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+      transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), opacity 0.2s;
+      user-select: none;
+    }
+    .candidate-card.stack-back {
+      transform: scale(0.94) translateY(10px);
+      opacity: 0.5;
+      z-index: 0;
+    }
+    .candidate-card.active {
+      z-index: 2;
+      cursor: grab;
+    }
+    .candidate-card.active:active { cursor: grabbing; }
+
+    .card-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .card-info { flex: 1; min-width: 0; }
+    .card-name { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-role { font-size: 12px; color: var(--primary); font-weight: 600; margin-bottom: 8px; }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .tag {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+
+    .card-stats {
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .stat { display: flex; align-items: center; gap: 4px; }
+
+    .red-flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #fef2f2;
+      color: var(--danger);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 8px;
+      margin-top: 6px;
+    }
+
+    /* Swipe indicators */
+    .swipe-hint {
+      position: absolute;
+      top: 12px;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+      z-index: 10;
+    }
+    .swipe-hint.hire { left: 12px; background: #d1fae5; color: var(--success); }
+    .swipe-hint.skip { right: 12px; background: #fef2f2; color: var(--danger); }
+
+    /* ── Action Buttons ── */
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .btn-action {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--card);
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .btn-action:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+    .btn-action.pass { border-color: #fca5a5; }
+    .btn-action.pass:hover { background: #fef2f2; border-color: var(--danger); }
+    .btn-action.hire { border-color: #6ee7b7; }
+    .btn-action.hire:hover { background: #d1fae5; border-color: var(--success); }
+    .btn-action.info  { border-color: var(--border); }
+    .btn-action.info:hover  { background: var(--primary-light); border-color: var(--primary); }
+
+    /* ── Round & Level ── */
+    .round-info {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    /* ── Feedback Popup ── */
+    .feedback {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.6);
+      font-size: 56px;
+      pointer-events: none;
+      opacity: 0;
+      transition: all 0.12s;
+      z-index: 999;
+    }
+    .feedback.show {
+      transform: translate(-50%, -130%) scale(1.2);
+      opacity: 1;
+    }
+
+    /* ── Game Over / Start Screen ── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(248,250,252,0.92);
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 24px;
+      text-align: center;
+    }
+    .overlay-icon { font-size: 56px; margin-bottom: 12px; }
+    .overlay h2 { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+    .overlay p { font-size: 14px; color: var(--muted); max-width: 280px; line-height: 1.6; margin-bottom: 20px; }
+
+    .result-grid {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .result-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .result-item .val { font-size: 22px; font-weight: 800; color: var(--primary); }
+    .result-item .lbl { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      font-family: inherit;
+    }
+    .btn-primary:hover { background: #4f46e5; transform: translateY(-1px); }
+
+    .how-to {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+      width: 100%;
+      max-width: 280px;
+      text-align: left;
+    }
+    .how-to-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .how-to-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+  <div class="offline-banner">
+    📡 You're offline — but you can still play! &emsp;
+    <a href="javascript:window.location.reload()">↺ Retry connection</a>
+  </div>
+
+  <!-- Feedback emoji -->
+  <div class="feedback" id="feedback"></div>
+
+  <!-- Start Screen -->
+  <div class="overlay" id="startScreen">
+    <div class="overlay-icon">🧑‍💼</div>
+    <h2>Hire or Pass?</h2>
+    <p>You're the recruiter! Score points by making smart hiring decisions before your time runs out.</p>
+    <div class="how-to">
+      <div class="how-to-item">
+        <div class="how-to-icon" style="background:#d1fae5">✅</div>
+        <span>Hire strong candidates to gain points</span>
+      </div>
+      <div class="how-to-item">
+        <div class="how-to-icon" style="background:#fef2f2">❌</div>
+        <span>Pass on red-flag candidates for bonus</span>
+      </div>
+      <div class="how-to-item">
+        <div class="how-to-icon" style="background:#fef9c3">⚡</div>
+        <span>Build combos for score multipliers</span>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="startGame()">Start Hiring 🚀</button>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div class="overlay" id="gameOver" style="display:none">
+    <div class="overlay-icon">📋</div>
+    <h2 id="goTitle">Round Complete!</h2>
+    <p id="goMsg">You've reviewed all the candidates for this batch.</p>
+    <div class="result-grid">
+      <div class="result-item"><div class="val" id="goScore">0</div><div class="lbl">Score</div></div>
+      <div class="result-item"><div class="val" id="goHired">0</div><div class="lbl">Hired</div></div>
+      <div class="result-item"><div class="val" id="goBest">0</div><div class="lbl">Best</div></div>
+    </div>
+    <button class="btn-primary" onclick="startGame()">New Batch 🔄</button>
+  </div>
+
+  <!-- Main Game -->
+  <div class="game-wrap">
+    <div class="brand">
+      <div class="brand-dot">H</div>
+      <div class="brand-name">HillBCS Recruiter</div>
+    </div>
+    <div class="headline">Swipe or tap to decide — you're offline anyway!</div>
+
+    <div class="score-bar">
+      <div class="score-item"><div class="score-val" id="scoreVal">0</div><div class="score-lbl">Score</div></div>
+      <div class="score-item"><div class="score-val combo-val" id="comboVal">×1</div><div class="score-lbl">Combo</div></div>
+      <div class="score-item"><div class="score-val streak-val" id="streakVal">🔥0</div><div class="score-lbl">Streak</div></div>
+    </div>
+
+    <div class="timer-wrap"><div class="timer-bar" id="timerBar"></div></div>
+
+    <div class="card-stage" id="cardStage">
+      <!-- Cards rendered by JS -->
+    </div>
+
+    <div class="actions">
+      <button class="btn-action pass" onclick="decide('pass')" title="Pass">❌</button>
+      <button class="btn-action info"  onclick="showTip()"     title="Tip">💡</button>
+      <button class="btn-action hire" onclick="decide('hire')" title="Hire">✅</button>
+    </div>
+
+    <div class="round-info" id="roundInfo">Card 1 of 10</div>
+  </div>
+
+<script>
+// ── Candidate Data Pool ──────────────────────────────────────────────────────
+const CANDIDATES = [
+  { name:'Alex Rivera',   role:'Frontend Dev',       emoji:'👨‍💻', color:'#e0e7ff', tags:['React','TypeScript','CSS'], exp:'3 yrs', match:'90%', redFlag:null },
+  { name:'Jordan Kim',    role:'UX Designer',         emoji:'🎨', color:'#fce7f3', tags:['Figma','Research','Prototyping'], exp:'5 yrs', match:'88%', redFlag:null },
+  { name:'Sam Torres',    role:'Backend Dev',         emoji:'⚙️', color:'#d1fae5', tags:['Node.js','PostgreSQL','AWS'], exp:'4 yrs', match:'85%', redFlag:null },
+  { name:'Morgan Lee',    role:'Product Manager',     emoji:'📊', color:'#fef3c7', tags:['Agile','Roadmapping','Analytics'], exp:'6 yrs', match:'92%', redFlag:null },
+  { name:'Casey Nguyen',  role:'Data Analyst',        emoji:'📈', color:'#ede9fe', tags:['Python','SQL','Tableau'], exp:'2 yrs', match:'78%', redFlag:null },
+  { name:'Riley Johnson', role:'DevOps Engineer',     emoji:'🛠️', color:'#ffedd5', tags:['Docker','CI/CD','Kubernetes'], exp:'5 yrs', match:'87%', redFlag:null },
+  { name:'Jamie Patel',   role:'QA Engineer',         emoji:'🔍', color:'#cffafe', tags:['Selenium','Jest','Test Plans'], exp:'3 yrs', match:'82%', redFlag:null },
+  { name:'Drew Martinez','role':'HR Specialist',      emoji:'💼', color:'#fce7f3', tags:['Recruitment','Compliance','HRIS'], exp:'4 yrs', match:'84%', redFlag:null },
+  // Red flag candidates (should be PASSED)
+  { name:'Blake Owens',   role:'Senior Dev',          emoji:'🚩', color:'#fee2e2', tags:['PHP','MySQL'], exp:'1 mo', match:'40%', redFlag:'Only 1 month experience for Senior role' },
+  { name:'Quinn Black',   role:'Full-Stack Dev',      emoji:'🚩', color:'#fee2e2', tags:['Angry','Boss'],exp:'8 yrs', match:'30%', redFlag:'Fired from last 3 jobs for conduct' },
+  { name:'Avery White',   role:'Data Scientist',      emoji:'🚩', color:'#fee2e2', tags:['Excel'],       exp:'0 yrs', match:'15%', redFlag:'No relevant experience or skills' },
+  { name:'Skyler Gray',   role:'Project Manager',     emoji:'🚩', color:'#fee2e2', tags:['Meetings'],    exp:'6 mo', match:'22%', redFlag:'Never shipped a project on time' },
+  // More good candidates
+  { name:'Logan Chen',    role:'Mobile Dev',          emoji:'📱', color:'#dbeafe', tags:['Flutter','Swift','Kotlin'], exp:'4 yrs', match:'89%', redFlag:null },
+  { name:'Tay Brooks',    role:'Security Analyst',    emoji:'🔐', color:'#f0fdf4', tags:['OWASP','Pentesting','SIEM'], exp:'6 yrs', match:'93%', redFlag:null },
+  { name:'Finley Ross',   role:'Cloud Architect',     emoji:'☁️', color:'#f0f9ff', tags:['AWS','Azure','GCP'], exp:'7 yrs', match:'95%', redFlag:null },
+  { name:'Peyton Hall',   role:'Content Strategist',  emoji:'✍️', color:'#fef9c3', tags:['SEO','Copywriting','Analytics'], exp:'3 yrs', match:'80%', redFlag:null },
+];
+
+const TIPS = [
+  '💡 High match % = candidate fits the job requirements well.',
+  '🚩 Red flags always mean you should PASS!',
+  '⚡ Three correct decisions in a row builds a combo!',
+  '⏱ Faster decisions earn more time bonuses.',
+  '🎯 Combos multiply your score — build streaks!',
+  '✅ Hiring good candidates = +10 base points.',
+  '❌ Correctly passing bad candidates = +15 bonus!',
+  '🔥 Keep your streak alive for maximum multipliers.',
+];
+
+// ── Game State ────────────────────────────────────────────────────────────────
+let score = 0, combo = 1, streak = 0, bestScore = 0;
+let queue = [], current = null, cardIdx = 0;
+let timerPct = 100, timerInterval = null, timePerCard = 15;
+let dragStartX = 0, isDragging = false;
+
+function shuffle(arr) {
+  const a = [...arr]; for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a;
+}
+
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('gameOver').style.display = 'none';
+  score = 0; combo = 1; streak = 0; cardIdx = 0;
+  queue = shuffle(CANDIDATES).slice(0, 10);
+  render();
+  startTimer();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+function render() {
+  const stage = document.getElementById('cardStage');
+  stage.innerHTML = '';
+
+  if (cardIdx >= queue.length) { endGame(); return; }
+
+  // Stack behind (next card)
+  if (cardIdx + 1 < queue.length) {
+    stage.appendChild(buildCard(queue[cardIdx + 1], false));
+  }
+  // Active card
+  const active = buildCard(queue[cardIdx], true);
+  stage.appendChild(active);
+  setupSwipe(active);
+  current = queue[cardIdx];
+
+  updateHUD();
+}
+
+function buildCard(c, active) {
+  const el = document.createElement('div');
+  el.className = 'candidate-card ' + (active ? 'active' : 'stack-back');
+
+  el.innerHTML = `
+    <div class="swipe-hint hire">✅ HIRE</div>
+    <div class="swipe-hint skip">❌ PASS</div>
+    <div class="card-avatar" style="background:${c.color}">${c.emoji}</div>
+    <div class="card-info">
+      <div class="card-name">${c.name}</div>
+      <div class="card-role">${c.role}</div>
+      <div class="card-tags">
+        ${c.tags.map(t=>`<span class="tag">${t}</span>`).join('')}
+      </div>
+      <div class="card-stats">
+        <span class="stat">💼 ${c.exp}</span>
+        <span class="stat">🎯 ${c.match} match</span>
+      </div>
+      ${c.redFlag ? `<div class="red-flag">🚩 ${c.redFlag}</div>` : ''}
+    </div>`;
+  return el;
+}
+
+// ── Drag / Swipe ──────────────────────────────────────────────────────────────
+function setupSwipe(el) {
+  el.addEventListener('mousedown', e => { isDragging=true; dragStartX=e.clientX; });
+  document.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartX;
+    el.style.transform = `translateX(${dx}px) rotate(${dx*0.05}deg)`;
+    el.querySelector('.swipe-hint.hire').style.opacity = dx > 30 ? Math.min((dx-30)/40,1) : 0;
+    el.querySelector('.swipe-hint.skip').style.opacity = dx < -30 ? Math.min((-dx-30)/40,1) : 0;
+  });
+  document.addEventListener('mouseup', e => {
+    if (!isDragging) return; isDragging=false;
+    const dx = e.clientX - dragStartX;
+    if (dx > 80) decide('hire');
+    else if (dx < -80) decide('pass');
+    else { el.style.transform=''; el.querySelector('.swipe-hint.hire').style.opacity=0; el.querySelector('.swipe-hint.skip').style.opacity=0; }
+  });
+
+  el.addEventListener('touchstart', e => { dragStartX = e.touches[0].clientX; isDragging=true; }, {passive:true});
+  el.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const dx = e.touches[0].clientX - dragStartX;
+    el.style.transform=`translateX(${dx}px) rotate(${dx*0.05}deg)`;
+    el.querySelector('.swipe-hint.hire').style.opacity = dx>30?Math.min((dx-30)/40,1):0;
+    el.querySelector('.swipe-hint.skip').style.opacity = dx<-30?Math.min((-dx-30)/40,1):0;
+  }, {passive:true});
+  el.addEventListener('touchend', e => {
+    if (!isDragging) return; isDragging=false;
+    const dx = e.changedTouches[0].clientX - dragStartX;
+    if (dx>80) decide('hire'); else if (dx<-80) decide('pass');
+    else { el.style.transform=''; }
+  });
+}
+
+// ── Decision Logic ────────────────────────────────────────────────────────────
+function decide(action) {
+  if (!current) return;
+  const isGood = !current.redFlag;
+  let correct = (action==='hire' && isGood) || (action==='pass' && !isGood);
+
+  if (correct) {
+    streak++;
+    if (streak % 3 === 0) combo = Math.min(combo + 1, 5);
+    const base = action==='hire' ? 10 : 15;
+    const pts = base * combo;
+    score += pts;
+    showFeedback(action==='hire' ? '✅' : '✨', pts);
+  } else {
+    streak = 0; combo = Math.max(combo - 1, 1);
+    score = Math.max(score - 5, 0);
+    showFeedback(action==='hire' ? '😬' : '😅', -5);
+  }
+
+  // Timer bonus for fast decision
+  if (timerPct > 60) { score += 2; }
+
+  resetTimer();
+  cardIdx++;
+  setTimeout(render, 250);
+}
+
+function showFeedback(emoji, pts) {
+  const el = document.getElementById('feedback');
+  el.textContent = emoji + (pts > 0 ? ` +${pts}` : ` ${pts}`);
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 700);
+}
+
+function showTip() {
+  const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
+  showFeedback('💡', 0);
+  alert(tip);
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+function updateHUD() {
+  document.getElementById('scoreVal').textContent = score;
+  document.getElementById('comboVal').textContent = `×${combo}`;
+  document.getElementById('streakVal').textContent = `🔥${streak}`;
+  document.getElementById('roundInfo').textContent = `Card ${cardIdx+1} of ${queue.length}`;
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+function startTimer() { resetTimer(); }
+
+function resetTimer() {
+  clearInterval(timerInterval);
+  timerPct = 100;
+  const bar = document.getElementById('timerBar');
+  bar.style.width = '100%';
+  bar.classList.remove('danger');
+
+  timerInterval = setInterval(() => {
+    timerPct -= (100 / (timePerCard * 10));
+    bar.style.width = Math.max(timerPct, 0) + '%';
+    if (timerPct < 30) bar.classList.add('danger');
+    if (timerPct <= 0) {
+      clearInterval(timerInterval);
+      // Time up — auto-pass
+      streak = 0; combo = Math.max(combo-1,1);
+      showFeedback('⏰', 0);
+      cardIdx++;
+      setTimeout(render, 300);
+    }
+  }, 100);
+}
+
+// ── Game Over ─────────────────────────────────────────────────────────────────
+function endGame() {
+  clearInterval(timerInterval);
+  bestScore = Math.max(bestScore, score);
+  document.getElementById('goScore').textContent = score;
+  document.getElementById('goHired').textContent = cardIdx;
+  document.getElementById('goBest').textContent = bestScore;
+
+  let title = 'Round Complete!';
+  let msg = 'Not bad! Keep practising your hiring instincts.';
+  if (score >= 120) { title = '🏆 Expert Recruiter!'; msg = 'Incredible! You have razor-sharp hiring instincts.'; }
+  else if (score >= 80) { title = '🎯 Great Hiring!'; msg = 'You spotted most red flags and hired strong candidates!'; }
+  else if (score >= 40) { title = '👍 Decent Round!'; msg = 'Getting better! Watch for those red flags next time.'; }
+
+  document.getElementById('goTitle').textContent = title;
+  document.getElementById('goMsg').textContent = msg;
+  document.getElementById('gameOver').style.display = 'flex';
+}
+</script>
+</body>
+</html>

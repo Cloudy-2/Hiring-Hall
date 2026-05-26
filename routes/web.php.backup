@@ -1,0 +1,299 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+use App\Http\Controllers\AI\Manus\ManusChatController;
+use App\Http\Controllers\Drive\FileManagerController;
+use App\Http\Controllers\Profit\ProjectProfitTrackerController;
+
+use App\Http\Controllers\Chats\CallController;
+use App\Http\Controllers\Chats\ConversationController;
+use App\Http\Controllers\Chats\ConversationActionsController;
+use App\Http\Controllers\Chats\GroupController;
+use App\Http\Controllers\Chats\MemberController;
+use App\Http\Controllers\Chats\MessagesController;
+use App\Http\Controllers\Chats\ModeratorChatController;
+use App\Http\Controllers\Chats\PersonalTagController;
+use App\Http\Controllers\Chats\PresenceController;
+use App\Http\Controllers\Chats\UserProfileController;
+use App\Http\Controllers\Jobs\JobApplicationController;
+use App\Http\Controllers\Jobs\JobPostingController;
+use App\Http\Controllers\Jobs\SavedJobController;
+use App\Http\Controllers\Candidates\CandidatePanelController;
+use App\Http\Controllers\Candidates\CandidateBrowseController;
+use App\Http\Controllers\Candidates\CandidatePublicProfileController;
+use App\Http\Controllers\Employers\EmployerPanelController;
+use App\Http\Controllers\Moderator\DropdownOptionsController;
+use App\Http\Controllers\RatingController;
+
+Route::get('/', function () {
+    return redirect('/login');
+});
+
+Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified'])->group(function () {
+    Route::get('/dashboard', function () {
+        $user = auth()->user();
+        if ($user && $user->role === 'candidate') {
+            return redirect()->route('candidate.dashboard');
+        }
+
+        return redirect()->route('jobs');
+    })->name('dashboard');
+
+    Route::get('/test', function () {
+        return view('test');
+    })->name('test');
+
+    // Candidate panel (only for users with role = candidate, enforced in controller)
+    Route::get('/candidate/dashboard', [CandidatePanelController::class, 'dashboard'])->name('candidate.dashboard');
+    Route::get('/candidate/applications', [CandidatePanelController::class, 'applications'])->name('candidate.applications.index');
+    Route::get('/candidate/applications/history', [CandidatePanelController::class, 'applicationHistory'])->name('candidate.applications.history');
+    Route::delete('/candidate/applications/history/{application}', [CandidatePanelController::class, 'destroyHistory'])->name('candidate.applications.history.destroy');
+    Route::delete('/candidate/applications/{application}', [JobApplicationController::class, 'destroy'])->name('candidate.applications.destroy');
+    Route::get('/candidate/profile', [CandidatePanelController::class, 'editProfile'])->name('candidate.profile.edit');
+    Route::post('/candidate/profile', [CandidatePanelController::class, 'updateProfile'])->name('candidate.profile.update');
+    Route::get('/candidate/saved-jobs', [CandidatePanelController::class, 'savedJobs'])->name('candidate.saved-jobs.index');
+
+    // Employer panel (only for users with role = employer, enforced in controller)
+    Route::get('/employer/dashboard', [EmployerPanelController::class, 'dashboard'])->name('employer.dashboard');
+    Route::get('/employer/jobs', [EmployerPanelController::class, 'jobs'])->name('employer.jobs.index');
+    Route::patch('/employer/jobs/{job}/status', [EmployerPanelController::class, 'updateJobStatus'])->name('employer.jobs.update-status');
+    Route::get('/employer/applications', [EmployerPanelController::class, 'applications'])->name('employer.applications.index');
+    Route::get('/employer/applications/pipeline', [EmployerPanelController::class, 'applicationsPipeline'])->name('employer.applications.pipeline');
+    Route::get('/employer/history', [EmployerPanelController::class, 'history'])->name('employer.history.index');
+    Route::patch('/employer/applications/{application}/status', [EmployerPanelController::class, 'updateApplicationStatus'])->name('employer.applications.update-status');
+    Route::post('/employer/profile/photo', [EmployerPanelController::class, 'updateProfilePhoto'])->name('employer.profile.photo');
+    Route::post('/employer/jobs/{job}/restore', [EmployerPanelController::class, 'restoreJob'])->name('employer.jobs.restore');
+    Route::delete('/employer/jobs/{job}/delete', [EmployerPanelController::class, 'deleteJobPermanently'])->name('employer.jobs.delete');
+    Route::post('/employer/applications/{application}/restore', [EmployerPanelController::class, 'restoreApplication'])->name('employer.applications.restore');
+    Route::delete('/employer/applications/{application}/delete', [EmployerPanelController::class, 'deleteApplicationPermanently'])->name('employer.applications.delete');
+    Route::post('/employer/applications/bulk-restore', [EmployerPanelController::class, 'bulkRestoreApplications'])->name('employer.applications.bulk-restore');
+    Route::post('/employer/jobs/bulk-restore', [EmployerPanelController::class, 'bulkRestoreJobs'])->name('employer.jobs.bulk-restore');
+
+    // Moderator panel routes (role check in controller)
+    Route::get('/moderator/job-form-options', [DropdownOptionsController::class, 'jobFormOptions'])->name('moderator.job-form-options');
+    Route::get('/moderator/candidate-profile-options', [DropdownOptionsController::class, 'candidateProfileOptions'])->name('moderator.candidate-profile-options');
+    Route::post('/moderator/dropdown-options', [DropdownOptionsController::class, 'store'])->name('moderator.dropdown-options.store');
+    Route::patch('/moderator/dropdown-options/{option}', [DropdownOptionsController::class, 'update'])->name('moderator.dropdown-options.update');
+    Route::delete('/moderator/dropdown-options/{option}', [DropdownOptionsController::class, 'destroy'])->name('moderator.dropdown-options.destroy');
+
+    //  Route::get('/chats', function () {
+    //     return view('modules.chats.index');
+    // })->name('chatss');
+
+     Route::get('/candidates', [CandidateBrowseController::class, 'index'])->name('candidates');
+     Route::get('/candidates/details', [CandidatePublicProfileController::class, 'show'])->name('candidates.details');
+
+     Route::get('/jobs', [JobPostingController::class, 'index'])->name('jobs');
+     Route::get('/jobs/create', [JobPostingController::class, 'create'])->name('jobs.create');
+     Route::get('/jobs/{job:slug}/duplicate', [JobPostingController::class, 'duplicate'])->name('jobs.duplicate');
+     Route::post('/jobs', [JobPostingController::class, 'store'])->name('jobs.store');
+     Route::get('/jobs/{job:slug}', [JobPostingController::class, 'show'])->name('jobs.show');
+     Route::post('/jobs/{job:slug}/apply', [JobApplicationController::class, 'store'])->name('jobs.apply');
+     Route::post('/jobs/{job:slug}/save', [SavedJobController::class, 'store'])->name('jobs.save');
+     Route::get('/jobs/details', function () { return redirect()->route('jobs'); });
+
+     // Rating routes
+     Route::post('/jobs/{job}/rate', [RatingController::class, 'rateJob'])->name('jobs.rate');
+     Route::get('/jobs/{job}/rating', [RatingController::class, 'getJobRating'])->name('jobs.rating');
+     Route::post('/candidates/{candidate}/rate', [RatingController::class, 'rateCandidate'])->name('candidates.rate');
+     Route::get('/candidates/{candidate}/rating', [RatingController::class, 'getCandidateRating'])->name('candidates.rating');
+
+    Route::prefix('/ai')->group(function () {
+        Route::get('/chat', [ManusChatController::class, 'index'])->name('manus.chat');
+        Route::post('/chat/send', [ManusChatController::class, 'send'])->name('manus.chat.send');
+    });
+
+    Route::prefix('/profit-tracker')->group(function () {
+        Route::get('/create', [ProjectProfitTrackerController::class, 'form'])->name('profit.tracker.create');
+    });
+
+    Route::prefix('/drive')->group(function () {
+        Route::get('/file-manager', [FileManagerController::class, 'index'])->name('filemanager.index');
+        Route::get('/file-manager/folder', [FileManagerController::class, 'index'])->name('filemanager.index');
+        Route::post('/resources/folder/create', [FileManagerController::class, 'create_folder'])->name('drive.folder.create');
+
+        //
+        // Route::get('/preview/{id}', [GoogleDriveController::class, 'show'])->name('filemanager.filemanager');
+        // Route::get('/storage', [FileManagerController::class, 'index'])->name('filemanager.index');
+        // Route::get('/{parent_id?}', [FileManagerController::class, 'xindex'])->name('filemanager.index');
+        // Route::get('/folder/privacy', [FileManagerController::class, 'updatePrivacy'])->name('folder.privacy');
+        // Route::get('/folder/file/{url}', [FileManagerController::class, 'preview'])->name('folder.preview.file');
+
+        // Route::post('/upload', [FileManagerController::class, 'store'])->name('filemanager.store');
+        // Route::post('/create/folder', [FileManagerController::class, 'folder'])->name('filemanager.folder');
+        // Route::post('/submit', [FileManagerController::class, 'submitted'])->name('filemanager.submitted');
+        // Route::post('/rename/{id}', [FileManagerController::class, 'rename'])->name('filemanager.rename');
+
+        // Route::post('/api/files', [FileManagerController::class, 'api_files'])->name('api.filemanager.files');
+
+        // Route::delete('/{file}', [FileManagerController::class, 'destroy'])->name('filemanager.destroy');
+    });
+});
+
+Route::middleware('auth')->group(function () {
+    // Chat v1 - Redirect to v2
+    Route::get('/chats', function () {
+        return redirect('/chats/v2');
+    })->name('chats.show');
+    
+    // Chat v2 (New Discord-like layout)
+    Route::get('/chats/v2', [ConversationController::class, 'v2'])->name('chats.v2');
+    
+    // Chat Monitor (Moderators only)
+    Route::middleware('moderator')->group(function () {
+        Route::get('/chats/monitor', [ConversationController::class, 'monitor'])->name('chats.monitor');
+        Route::get('/chats/monitor/export', [ConversationController::class, 'exportCsv'])->name('chats.monitor.export');
+        Route::get('/chats/monitor/{id}', [ConversationController::class, 'show'])->name('conversations.show');
+    });
+
+    // Moderator Chat Management Routes
+    Route::middleware('moderator')->prefix('chats/manage')->group(function () {
+        Route::get('/global-feed', [ModeratorChatController::class, 'globalFeed'])->name('chats.manage.global-feed');
+        Route::get('/waiting-list', [ModeratorChatController::class, 'waitingList'])->name('chats.manage.waiting-list');
+        Route::post('/assign', [ModeratorChatController::class, 'assignToConversation'])->name('chats.manage.assign');
+        Route::get('/candidates', [ModeratorChatController::class, 'getCandidates'])->name('chats.manage.candidates');
+        Route::get('/groups', [ModeratorChatController::class, 'getGroups'])->name('chats.manage.groups');
+        Route::get('/muted-users', [ModeratorChatController::class, 'getMutedUsers'])->name('chats.manage.muted-users');
+        Route::get('/users-by-role', [ModeratorChatController::class, 'getUsersByRole'])->name('chats.manage.users-by-role');
+        
+        // Quick moderator actions (from message context menu)
+        Route::post('/mute-user', [ModeratorChatController::class, 'muteUser'])->name('chats.manage.mute-user');
+        Route::post('/kick-user', [ModeratorChatController::class, 'kickUser'])->name('chats.manage.kick-user');
+        Route::post('/delete-message', [ModeratorChatController::class, 'deleteMessage'])->name('chats.manage.delete-message');
+        
+        Route::prefix('{conversation}')->group(function () {
+            Route::post('/add-member', [ModeratorChatController::class, 'directAddMember'])->name('chats.manage.add-member');
+            Route::post('/members/{user}/mute', [ModeratorChatController::class, 'muteMember'])->name('chats.manage.mute');
+            Route::post('/members/{user}/unmute', [ModeratorChatController::class, 'unmuteMember'])->name('chats.manage.unmute');
+            Route::post('/members/{user}/kick', [ModeratorChatController::class, 'kickMember'])->name('chats.manage.kick');
+            Route::post('/members/{user}/channels', [ModeratorChatController::class, 'setMemberChannels'])->name('chats.manage.member-channels');
+            Route::post('/channels', [ModeratorChatController::class, 'createChannel'])->name('chats.manage.create-channel');
+            Route::put('/channels/{topic}', [ModeratorChatController::class, 'updateChannel'])->name('chats.manage.update-channel');
+        });
+    });
+
+    // FAQ / Relationships / Tech Support tickets
+    Route::get('/FAQ', function () {
+        return view('modules.faq.faq');
+    })->name('faq.index');
+
+    Route::get('/relationship/list', function () {
+        return view('modules.relationships.index');
+    })->name('relationships.list');
+
+    // Relationship create page
+    Route::get('/relationship/create', function () {
+        return view('modules.relationships.forms.create.company');
+    })->name('relationship.create');
+
+    Route::post('/relationship/contact', function (\Illuminate\Http\Request $request) {
+        // TODO: Implement real persistence for new relationship/company
+        // For now, just redirect back to the list with a flash message.
+        return redirect('/relationship/list')->with('status', 'Relationship form submitted (stub).');
+    })->name('contact.create');
+
+    Route::get('/relationship/company', function () {
+        // TODO: Replace [] with real company relationship data
+        return response()->json(['data' => []]);
+    })->name('relationship.company');
+
+    Route::get('/relationship/contacts', function () {
+        // TODO: Replace [] with real contacts data
+        return response()->json(['data' => []]);
+    })->name('relationship.contacts');
+
+    Route::get('/tickets/list', function () {
+        // TODO: replace collect([]) with real Ticket model query when available
+        $tickets = collect();
+
+        return view('modules.tech-support.index', compact('tickets'));
+    })->name('tickets.list');
+
+    // Personal Tags Routes
+    Route::prefix('personal-tags')->group(function () {
+        Route::get('/', [PersonalTagController::class, 'index'])->name('personal-tags.index');
+        Route::post('/', [PersonalTagController::class, 'store'])->name('personal-tags.store');
+        Route::get('/{personalTag}', [PersonalTagController::class, 'show'])->name('personal-tags.show');
+        Route::put('/{personalTag}', [PersonalTagController::class, 'update'])->name('personal-tags.update');
+        Route::delete('/{personalTag}', [PersonalTagController::class, 'destroy'])->name('personal-tags.destroy');
+        Route::post('/{personalTag}/messages', [PersonalTagController::class, 'storeMessage'])->name('personal-tags.messages.store');
+        Route::delete('/{personalTag}/messages/{message}', [PersonalTagController::class, 'destroyMessage'])->name('personal-tags.messages.destroy');
+    });
+
+    // Chat Routes
+    Route::prefix('chats')->group(function () {
+        // specific routes
+        Route::post('/conversations', [GroupController::class, 'store'])->name('conversations.store');
+        Route::get('/conversations/search', [ConversationActionsController::class, 'search'])->name('conversations.search');
+        Route::get('/pending-requests-count', [GroupController::class, 'getPendingRequestsCount'])->name('conversations.pending-requests-count');
+        // wildcard routes
+        Route::prefix('{conversation}')->group(function () {
+            Route::get('/info', [ConversationController::class, 'info'])->name('conversations.info');
+            Route::post('/read', [ConversationActionsController::class, 'markRead'])->name('conversations.markAsRead');
+            Route::put('/', [GroupController::class, 'update'])->name('conversations.update');
+            Route::delete('/', [GroupController::class, 'destroy'])->name('conversations.destroy');
+            // Participants
+            Route::get('/participants', [MemberController::class, 'index'])->name('conversations.participants.index');
+            Route::post('/members', [MemberController::class, 'store'])->name('conversations.members.add');
+            Route::delete('/members/{user}', [MemberController::class, 'destroy'])->name('conversations.members.remove');
+            Route::post('/leave', [MemberController::class, 'leave'])->name('conversations.leave');
+            // Attachments
+            Route::get('/attachments', [ConversationActionsController::class, 'attachments'])->name('conversations.attachments');
+            // Pinned Messages
+            Route::get('/pinned', [ConversationController::class, 'pinnedMessages'])->name('conversations.pinned');
+            // Group Settings
+            Route::post('/settings', [GroupController::class, 'saveSettings'])->name('conversations.settings');
+            Route::get('/invite', [GroupController::class, 'getInvite'])->name('conversations.get-invite');
+            Route::post('/regenerate-invite', [GroupController::class, 'regenerateInvite'])->name('conversations.regenerate-invite');
+            // Join Requests
+            Route::post('/request-join', [GroupController::class, 'requestJoin'])->name('conversations.request-join');
+            Route::get('/join-requests', [GroupController::class, 'getJoinRequests'])->name('conversations.join-requests');
+            Route::post('/join-requests/{requestId}/approve', [GroupController::class, 'approveJoinRequest'])->name('conversations.join-requests.approve');
+            Route::post('/join-requests/{requestId}/reject', [GroupController::class, 'rejectJoinRequest'])->name('conversations.join-requests.reject');
+            // Discussion Topics/Channels
+            Route::post('/topics', [GroupController::class, 'createTopic'])->name('conversations.topics.store');
+            Route::delete('/topics/{topic}', [GroupController::class, 'deleteTopic'])->name('conversations.topics.destroy');
+                // Messages
+                Route::get('/messages', [MessagesController::class, 'index'])->name('conversations.messages.index');
+                Route::post('/messages', [MessagesController::class, 'store'])->name('conversations.messages.store');  
+                Route::post('/typing', [MessagesController::class, 'typing'])->name('conversations.typing');
+                Route::post('/messages/read', [MessagesController::class, 'markAsRead'])->name('conversations.messages.read');
+            // Meet (legacy)
+            Route::get('/meet/join', [ConversationController::class, 'joined'])->name('conversations.meet.join');
+            Route::get('/meet/left', [ConversationController::class, 'left'])->name('conversations.meet.left');
+            Route::get('/meet/end', [ConversationController::class, 'end'])->name('conversations.meet.end');
+            
+            // Jitsi Calls
+            Route::post('/call/start', [CallController::class, 'start'])->name('conversations.call.start');
+            Route::post('/call/end', [CallController::class, 'end'])->name('conversations.call.end');
+            Route::post('/call/join', [CallController::class, 'join'])->name('conversations.call.join');
+        });
+
+        // Message actions
+        Route::prefix('messages/{messageId}')->group(function () {
+            Route::post('/react', [MessagesController::class, 'react'])->name('messages.react');
+            Route::delete('/react', [MessagesController::class, 'unreact'])->name('messages.unreact');
+            Route::post('/pin', [MessagesController::class, 'pinMessage'])->name('messages.pin');
+            Route::delete('/pin', [MessagesController::class, 'unpinMessage'])->name('messages.unpin');
+            Route::post('/forward', [MessagesController::class, 'forward'])->name('messages.forward');
+            Route::post('/report', [MessagesController::class, 'report'])->name('messages.report');
+        })->where('messageId', '[0-9]+');
+
+        // Attachment download (serves files through PHP for better compatibility)
+        Route::get('/attachments/{attachment}/download', [MessagesController::class, 'downloadAttachment'])->name('attachments.download');
+
+        // User profile card (for hover cards)
+        Route::get('/users/{user}/profile-card', [UserProfileController::class, 'profileCard'])->name('users.profile-card');
+
+        // Presence/Online status
+        Route::post('/presence/heartbeat', [PresenceController::class, 'heartbeat'])->name('presence.heartbeat');
+        Route::post('/presence/status', [PresenceController::class, 'setStatus'])->name('presence.status');
+        Route::get('/presence/{conversationId}/online', [PresenceController::class, 'getOnlineUsers'])->name('presence.online');
+    });
+});
+
+// Group Invite Link (requires auth but outside chats prefix)
+Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified'])->group(function () {
+    Route::get('/invite/{code}', [GroupController::class, 'joinViaInvite'])->name('invite.join');
+});

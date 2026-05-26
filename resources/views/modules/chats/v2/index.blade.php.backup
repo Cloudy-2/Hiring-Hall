@@ -1,0 +1,1785 @@
+<x-chat-v2-layout>
+    {{-- Mobile overlay backdrop --}}
+    <div id="mobile-overlay" class="mobile-overlay md:hidden"></div>
+
+    <div class="chat-v2-wrapper flex h-screen w-full font-display transition-colors duration-200">
+        @include('modules.chats.v2.components.sidemenu', [
+            'servers' => $servers,
+            'selectedConversation' => $selectedConversation
+        ])
+        @include('modules.chats.v2.components.list', [
+            'user' => $user,
+            'selectedConversation' => $selectedConversation,
+            'topics' => $topics,
+            'friendStats' => $friendStats,
+            'frequentFriends' => $frequentFriends,
+            'directMessages' => $directMessages,
+        ])
+        @include('modules.chats.v2.components.main', [
+            'user' => $user,
+            'selectedConversation' => $selectedConversation,
+            'selectedPersonalTag' => $selectedPersonalTag ?? null,
+            'messages' => $messages,
+            'personalTagMessages' => $personalTagMessages ?? collect(),
+            'topics' => $topics,
+            'rightColumn' => $rightColumn,
+        ])
+    </div>
+    @include('components.modules.chat.modals.index', [
+        'contacts' => $directMessages,
+        'groups' => $servers,
+    ])
+    <script>
+        const initChatV2 = () => {
+            const modalContainers = document.querySelectorAll('[data-chat-modal]');
+            const chatsV2Url = @json(route('chats.v2'));
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+            const openModal = (name) => {
+                const modal = document.querySelector(`[data-chat-modal="${name}"]`);
+                if (!modal) return;
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                document.body.classList.add('chat-modal-open');
+            };
+
+            const closeModal = (name) => {
+                const modal = document.querySelector(`[data-chat-modal="${name}"]`);
+                if (!modal) return;
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                if (!document.querySelector('[data-chat-modal].flex')) {
+                    document.body.classList.remove('chat-modal-open');
+                }
+            };
+
+            document.querySelectorAll('[data-open-chat-modal]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const name = btn.getAttribute('data-open-chat-modal');
+                    if (!name) return;
+                    openModal(name);
+                });
+            });
+
+            modalContainers.forEach(modal => {
+                const name = modal.getAttribute('data-chat-modal');
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal || e.target.closest(`[data-chat-modal-close="${name}"]`)) {
+                        closeModal(name);
+                    }
+                });
+            });
+
+            const handleCreateGroupSubmit = async (event) => {
+                const form = event.target;
+                if (!form.matches('#create-group-form')) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+
+                if (form.dataset.submitting === 'true') return;
+                form.dataset.submitting = 'true';
+
+                const submitBtn = form.querySelector('[data-submit]');
+                submitBtn?.classList.add('pointer-events-none', 'opacity-60');
+
+                const formData = new FormData(form);
+                formData.set('type', 'group');
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: formData,
+                    });
+
+                    const payload = await response.json().catch(() => null);
+
+                    if (!response.ok || !payload) {
+                        const message = payload?.message ?? 'Unable to create group right now.';
+                        throw new Error(message);
+                    }
+
+                    const groupName = payload.title ?? payload.name ?? 'New group';
+                    await (window.Swal?.fire({
+                        icon: 'success',
+                        title: 'Group created',
+                        text: `${groupName} is ready.`,
+                        confirmButtonColor: '#2b2bee',
+                    }) ?? Promise.resolve(alert(`${groupName} created`)));
+
+                    closeModal('create-group');
+                    form.reset();
+
+                    const conversationId = payload.conversation_id ?? payload.id ?? null;
+                    if (conversationId) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('conversation', conversationId);
+                        window.location = url.toString();
+                    } else {
+                        window.location.reload();
+                    }
+                } catch (error) {
+                    const message = error?.message ?? 'Unexpected error. Please try again.';
+                    window.Swal?.fire({
+                        icon: 'error',
+                        title: 'Could not create group',
+                        text: message,
+                    }) ?? alert(message);
+                } finally {
+                    submitBtn?.classList.remove('pointer-events-none', 'opacity-60');
+                    delete form.dataset.submitting;
+                }
+            };
+
+            document.addEventListener('submit', handleCreateGroupSubmit, true);
+
+            document.addEventListener('click', async (event) => {
+                const trigger = event.target.closest('[data-delete-group]');
+                if (!trigger) return;
+
+                const deleteUrl = trigger.getAttribute('data-delete-url');
+                const groupName = trigger.getAttribute('data-group-name') || 'this group';
+
+                const confirmed = await (window.Swal?.fire({
+                    icon: 'warning',
+                    title: 'Delete group?',
+                    text: `This will permanently delete "${groupName}" and all of its messages.`,
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Delete group',
+                }) ?? Promise.resolve(confirm(`Delete ${groupName}?`)));
+
+                if (!confirmed || (confirmed.isConfirmed === false && typeof confirmed !== 'boolean')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(deleteUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken ?? '',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                        },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Unable to delete group right now.');
+                    }
+
+                    await (window.Swal?.fire({
+                        icon: 'success',
+                        title: 'Group deleted',
+                        text: `"${groupName}" has been removed.`,
+                        timer: 1800,
+                        showConfirmButton: false,
+                    }) ?? Promise.resolve());
+
+                    window.location.href = chatsV2Url;
+                } catch (error) {
+                    const message = error?.message ?? 'Unexpected error. Please try again.';
+                    window.Swal?.fire({
+                        icon: 'error',
+                        title: 'Could not delete group',
+                        text: message,
+                    }) ?? alert(message);
+                }
+            });
+
+            // Todo functionality
+            initTodoModal();
+        };
+
+        const initTodoModal = () => {
+            const STORAGE_KEY = 'chat_todos';
+            let todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            let currentFilter = 'all';
+
+            const todoList = document.getElementById('todo-list');
+            const todoForm = document.getElementById('add-todo-form');
+            const todoCount = document.getElementById('todo-count');
+            const clearCompletedBtn = document.getElementById('clear-completed-btn');
+            const emptyState = todoList?.querySelector('.todo-empty-state');
+
+            const saveTodos = () => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+            };
+
+            const getPriorityColor = (priority) => {
+                const colors = {
+                    low: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+                    medium: 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-300',
+                    high: 'bg-orange-100 text-orange-600 dark:bg-orange-900/50 dark:text-orange-300',
+                    urgent: 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-300'
+                };
+                return colors[priority] || colors.medium;
+            };
+
+            const formatDate = (dateStr) => {
+                if (!dateStr) return '';
+                const date = new Date(dateStr);
+                const today = new Date();
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
+                if (date.toDateString() === today.toDateString()) return 'Today';
+                if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            };
+
+            const renderTodos = () => {
+                if (!todoList) return;
+
+                const filtered = todos.filter(todo => {
+                    if (currentFilter === 'all') return true;
+                    return todo.status === currentFilter;
+                });
+
+                if (filtered.length === 0) {
+                    if (emptyState) emptyState.classList.remove('hidden');
+                    todoList.querySelectorAll('.todo-item').forEach(el => el.remove());
+                } else {
+                    if (emptyState) emptyState.classList.add('hidden');
+                    todoList.querySelectorAll('.todo-item').forEach(el => el.remove());
+
+                    filtered.forEach(todo => {
+                        const isCompleted = todo.status === 'completed';
+                        const div = document.createElement('div');
+                        div.className = `todo-item flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:border-primary/30 ${isCompleted ? 'completed opacity-60' : ''}`;
+                        div.dataset.todoId = todo.id;
+
+                        div.innerHTML = `
+                            <button type="button" class="todo-toggle mt-0.5 flex-shrink-0 size-5 rounded-full border-2 ${isCompleted ? 'border-green-500 bg-green-500' : 'border-slate-300 dark:border-white/30'} flex items-center justify-center transition hover:border-primary">
+                                ${isCompleted ? '<i class="bi bi-check text-white text-sm"></i>' : ''}
+                            </button>
+                            <div class="flex-1 min-w-0">
+                                <p class="todo-title text-sm font-medium text-slate-900 dark:text-white ${isCompleted ? 'line-through' : ''}">${todo.title}</p>
+                                ${todo.description ? `<p class="text-xs text-slate-500 dark:text-white/50 mt-1">${todo.description}</p>` : ''}
+                                <div class="flex flex-wrap items-center gap-2 mt-2">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${getPriorityColor(todo.priority)}">${todo.priority}</span>
+                                    ${todo.due_date ? `<span class="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-white/50"><i class="bi bi-clock text-sm"></i>${formatDate(todo.due_date)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <select class="todo-status-select text-xs rounded border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-700 dark:text-white/80 px-2 py-1">
+                                    <option value="pending" ${todo.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="in_progress" ${todo.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+                                    <option value="completed" ${todo.status === 'completed' ? 'selected' : ''}>Completed</option>
+                                </select>
+                                <button type="button" class="todo-delete p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+                                    <i class="bi bi-trash text-lg"></i>
+                                </button>
+                            </div>
+                        `;
+                        todoList.appendChild(div);
+                    });
+                }
+
+                // Update count
+                const pendingCount = todos.filter(t => t.status !== 'completed').length;
+                const completedCount = todos.filter(t => t.status === 'completed').length;
+                if (todoCount) todoCount.textContent = `${pendingCount} pending, ${completedCount} completed`;
+
+                // Show/hide clear completed button
+                if (clearCompletedBtn) {
+                    clearCompletedBtn.classList.toggle('hidden', completedCount === 0);
+                }
+            };
+
+            // Add todo
+            todoForm?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const title = document.getElementById('todo-title')?.value.trim();
+                if (!title) return;
+
+                const newTodo = {
+                    id: Date.now().toString(),
+                    title,
+                    description: document.getElementById('todo-description')?.value.trim() || '',
+                    priority: document.getElementById('todo-priority')?.value || 'medium',
+                    status: 'pending',
+                    due_date: document.getElementById('todo-due-date')?.value || null,
+                    created_at: new Date().toISOString()
+                };
+
+                todos.unshift(newTodo);
+                saveTodos();
+                renderTodos();
+                todoForm.reset();
+            });
+
+            // Filter tabs
+            document.querySelectorAll('[data-todo-filter]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('[data-todo-filter]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.dataset.todoFilter;
+                    renderTodos();
+                });
+            });
+
+            // Toggle complete, change status, delete
+            todoList?.addEventListener('click', (e) => {
+                const todoItem = e.target.closest('.todo-item');
+                if (!todoItem) return;
+                const todoId = todoItem.dataset.todoId;
+
+                if (e.target.closest('.todo-toggle')) {
+                    const todo = todos.find(t => t.id === todoId);
+                    if (todo) {
+                        todo.status = todo.status === 'completed' ? 'pending' : 'completed';
+                        todo.completed_at = todo.status === 'completed' ? new Date().toISOString() : null;
+                        saveTodos();
+                        renderTodos();
+                    }
+                }
+
+                if (e.target.closest('.todo-delete')) {
+                    todos = todos.filter(t => t.id !== todoId);
+                    saveTodos();
+                    renderTodos();
+                }
+            });
+
+            // Status change
+            todoList?.addEventListener('change', (e) => {
+                if (e.target.classList.contains('todo-status-select')) {
+                    const todoItem = e.target.closest('.todo-item');
+                    const todoId = todoItem?.dataset.todoId;
+                    const todo = todos.find(t => t.id === todoId);
+                    if (todo) {
+                        todo.status = e.target.value;
+                        todo.completed_at = todo.status === 'completed' ? new Date().toISOString() : null;
+                        saveTodos();
+                        renderTodos();
+                    }
+                }
+            });
+
+            // Clear completed
+            clearCompletedBtn?.addEventListener('click', () => {
+                todos = todos.filter(t => t.status !== 'completed');
+                saveTodos();
+                renderTodos();
+            });
+
+            // Initial render
+            renderTodos();
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initChatV2);
+        } else {
+            initChatV2();
+        }
+
+        // ============================================================
+        // MOBILE NAVIGATION
+        // ============================================================
+        // Make functions globally accessible
+        window.openMobileNav = function() {
+            const sidemenu = document.querySelector('.chat-v2-sidemenu');
+            const sidebar = document.querySelector('.chat-v2-sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            sidemenu?.classList.add('mobile-open');
+            sidebar?.classList.add('mobile-open');
+            overlay?.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeMobileNav = function() {
+            const sidemenu = document.querySelector('.chat-v2-sidemenu');
+            const sidebar = document.querySelector('.chat-v2-sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            sidemenu?.classList.remove('mobile-open');
+            sidebar?.classList.remove('mobile-open');
+            overlay?.classList.remove('active');
+            document.body.style.overflow = '';
+        };
+
+        const initMobileNav = () => {
+            const menuBtn = document.getElementById('mobile-menu-btn');
+            const overlay = document.getElementById('mobile-overlay');
+
+            // Menu button click
+            menuBtn?.addEventListener('click', window.openMobileNav);
+
+            // Overlay click to close
+            overlay?.addEventListener('click', window.closeMobileNav);
+
+            // Use event delegation for sidemenu clicks
+            document.addEventListener('click', (e) => {
+                if (window.innerWidth >= 768) return;
+                
+                // Check if click is on sidemenu button or link
+                const sidemenuEl = e.target.closest('.chat-v2-sidemenu a, .chat-v2-sidemenu button');
+                if (sidemenuEl) {
+                    // Close after small delay to allow modal/navigation to trigger
+                    setTimeout(window.closeMobileNav, 150);
+                }
+                
+                // Check if click is on sidebar link
+                const sidebarLink = e.target.closest('.chat-v2-sidebar a');
+                if (sidebarLink) {
+                    window.closeMobileNav();
+                }
+            });
+
+            // Close on escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') window.closeMobileNav();
+            });
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 768) {
+                    window.closeMobileNav();
+                }
+            });
+        };
+
+        document.addEventListener('DOMContentLoaded', initMobileNav);
+
+        // ============================================================
+        // MOBILE MORE DROPDOWN
+        // ============================================================
+        const initMobileDropdown = () => {
+            const moreBtn = document.getElementById('mobile-more-btn');
+            const moreMenu = document.getElementById('mobile-more-menu');
+
+            if (!moreBtn || !moreMenu) return;
+
+            const toggleMenu = () => {
+                moreMenu.classList.toggle('hidden');
+            };
+
+            const closeMenu = () => {
+                moreMenu.classList.add('hidden');
+            };
+
+            moreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleMenu();
+            });
+
+            // Close when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!moreMenu.contains(e.target) && e.target !== moreBtn) {
+                    closeMenu();
+                }
+            });
+
+            // Close on menu item click
+            moreMenu.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', closeMenu);
+            });
+        };
+
+        document.addEventListener('DOMContentLoaded', initMobileDropdown);
+
+        // ============================================================
+        // PENDING JOIN REQUESTS LOADER (Admin Only)
+        // ============================================================
+        const initPendingRequests = () => {
+            const conversationId = @json($selectedConversation?->id);
+            const isOwner = @json(($selectedConversation?->created_by ?? null) == auth()->id());
+            const isGroup = @json($selectedConversation?->type === 'group');
+            
+            // Get sidemenu buttons
+            const sidemenuBtn = document.getElementById('sidemenu-join-requests-btn');
+            const sidemenuBtnMobile = document.getElementById('sidemenu-join-requests-btn-mobile');
+            
+            // Only show join requests button for group admins
+            if (!isGroup || !isOwner) {
+                sidemenuBtn?.classList.add('hidden');
+                sidemenuBtnMobile?.classList.add('hidden');
+                return;
+            }
+            
+            // Show the button for admins
+            sidemenuBtn?.classList.remove('hidden');
+            sidemenuBtnMobile?.classList.remove('hidden');
+
+            const loadPendingCount = async () => {
+                try {
+                    const response = await fetch(`/chats/${conversationId}/join-requests`, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const count = data.requests?.length || 0;
+                        
+                        const section = document.getElementById('pending-requests-section');
+                        const countEl = document.getElementById('sidebar-pending-count');
+                        const sidemenuBadge = document.getElementById('sidemenu-requests-badge');
+                        const sidemenuBadgeMobile = document.getElementById('sidemenu-requests-badge-mobile');
+                        
+                        if (count > 0) {
+                            section?.classList.remove('hidden');
+                            if (countEl) countEl.textContent = count;
+                            if (sidemenuBadge) {
+                                sidemenuBadge.textContent = count;
+                                sidemenuBadge.classList.remove('hidden');
+                            }
+                            if (sidemenuBadgeMobile) {
+                                sidemenuBadgeMobile.textContent = count;
+                                sidemenuBadgeMobile.classList.remove('hidden');
+                            }
+                        } else {
+                            section?.classList.add('hidden');
+                            sidemenuBadge?.classList.add('hidden');
+                            sidemenuBadgeMobile?.classList.add('hidden');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to load pending requests:', e);
+                }
+            };
+
+            // Load on page load
+            loadPendingCount();
+            
+            // Expose for refresh after approve/reject
+            window.refreshPendingRequests = loadPendingCount;
+        };
+
+        document.addEventListener('DOMContentLoaded', initPendingRequests);
+
+        // ============================================================
+        // ECHO / PUSHER WEBSOCKET REAL-TIME FUNCTIONALITY
+        // ============================================================
+        const authUserId = @json(auth()->id());
+        const currentConversationId = @json($selectedConversation?->id);
+        let currentEchoChannelName = null;
+        let typingTimeoutId = null;
+        let lastTypingSentAt = 0;
+
+        // Helper to wait for Echo (needed because Vite app.js is a deferred module)
+        function onEchoReady(callback) {
+            if (window.Echo) {
+                callback(window.Echo);
+                return;
+            }
+
+            let attempts = 0;
+            const maxAttempts = 300; // ~30s
+
+            const interval = setInterval(() => {
+                if (window.Echo) {
+                    clearInterval(interval);
+                    callback(window.Echo);
+                } else if (attempts++ > maxAttempts) {
+                    clearInterval(interval);
+                }
+            }, 100);
+        }
+
+        // Join conversation channel for real-time messages
+        function joinConversationChannel(convId) {
+            if (!window.Echo || !convId) return;
+
+            // Leave previous channel
+            if (currentEchoChannelName) {
+                window.Echo.leave(currentEchoChannelName);
+            }
+
+            currentEchoChannelName = `conversations.${convId}`;
+
+            window.Echo
+                .private(currentEchoChannelName)
+                .listen('.message.sent', (e) => {
+                    const msg = e.message;
+
+                    // Skip if it's our own message
+                    if (msg.user?.id === authUserId) return;
+                    if (String(msg.conversation_id) !== String(convId)) return;
+
+                    // Render the new message
+                    renderIncomingMessage(msg);
+                    
+                    // Move this server to top of sidemenu (most recent activity)
+                    moveServerToTop(convId);
+                })
+                .listen('.conversation.typing', (e) => {
+                    if (!e || !e.conversation_id || !e.user_id) return;
+                    if (String(e.conversation_id) !== String(convId)) return;
+                    if (Number(e.user_id) === Number(authUserId)) return;
+
+                    showTypingIndicator(e.name || 'Someone');
+                })
+                .listen('.message.reacted', (e) => {
+                    if (!e || !e.message_id) return;
+                    if (String(e.conversation_id) !== String(convId)) return;
+                    
+                    // Skip if it's our own reaction (already updated optimistically)
+                    if (Number(e.user_id) === Number(authUserId)) return;
+                    
+                    // Update reaction UI in real-time
+                    handleRealtimeReaction(e.message_id, e.reaction, e.action, e.user_name);
+                })
+                .listen('.message.deleted', (e) => {
+                    // Handle moderator message deletion
+                    if (!e || !e.message_id) return;
+                    
+                    const messageEl = document.querySelector(`[data-message-id="${e.message_id}"]`);
+                    if (messageEl) {
+                        const bodyEl = messageEl.querySelector('.whitespace-pre-line');
+                        if (bodyEl) {
+                            bodyEl.innerHTML = `<span class="italic text-gray-400 dark:text-white/40">${e.replacement_text || 'A moderator removed this message'}</span>`;
+                        }
+                        const attachments = messageEl.querySelector('.grid.gap-2');
+                        if (attachments) attachments.remove();
+                    }
+                })
+                .listen('.user.muted', (e) => {
+                    if (!e || !e.user_id) return;
+                    
+                    // If the muted user is the current user, show notification
+                    if (Number(e.user_id) === Number(authUserId)) {
+                        const muteMsg = e.muted_until 
+                            ? `You have been muted until ${new Date(e.muted_until).toLocaleString()}`
+                            : 'You have been muted in this conversation';
+                        
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'You have been muted',
+                            text: muteMsg,
+                        });
+                    }
+                })
+                .listen('.user.kicked', (e) => {
+                    if (!e || !e.user_id) return;
+
+                    if (Number(e.user_id) === Number(authUserId)) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'You have been removed',
+                            text: 'A moderator has removed you from this conversation.',
+                            allowOutsideClick: false,
+                        }).then(() => {
+                            window.location.href = '/chats/v2';
+                        });
+                    } else {
+                        // Remove the user from the members list if visible
+                        const memberItem = document.querySelector(`.member-item[data-user-id="${e.user_id}"]`);
+                        if (memberItem) {
+                            memberItem.remove();
+                            // Update member counts
+                            const onlineCount = document.getElementById('online-count');
+                            const offlineCount = document.getElementById('offline-count');
+                            if (onlineCount) onlineCount.textContent = document.querySelectorAll('#online-members-list .member-item').length;
+                            if (offlineCount) offlineCount.textContent = document.querySelectorAll('#offline-members-list .member-item').length;
+                        }
+                    }
+                })
+                .listen('.call.started', (e) => {
+                    if (!e || !e.room_name) return;
+                    if (String(e.conversation_id) !== String(convId)) return;
+                    
+                    // Skip if it's our own call
+                    if (Number(e.caller_id) === Number(authUserId)) return;
+                    
+                    // Show incoming call modal
+                    if (typeof window.handleIncomingCall === 'function') {
+                        window.handleIncomingCall(e);
+                    }
+                })
+                .listen('.call.ended', (e) => {
+                    console.log('[Call] Call ended:', e);
+                });
+
+            console.log(`[Echo] Joined channel: ${currentEchoChannelName}`);
+        }
+
+        // Render incoming message from websocket
+        function renderIncomingMessage(msg) {
+            const messagesContainer = document.getElementById('messages-container');
+            if (!messagesContainer) return;
+
+            const isOwnMessage = msg.user?.id === authUserId;
+            const userName = msg.user?.name || 'User';
+            const avatar = msg.user?.avatar || (msg.user?.profile_photo_path
+                ? `/storage/${msg.user.profile_photo_path}`
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=1a1a2e&color=fff&bold=true`);
+
+            const timestamp = new Date(msg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            
+            // Check if message is a GIF
+            const isGif = msg.type === 'gif' || (msg.body && msg.body.startsWith('https://media.tenor.com'));
+            
+            // Build message body content
+            let bodyContent = '';
+            if (isGif) {
+                bodyContent = `<img src="${escapeHtml(msg.body || '')}" alt="GIF" class="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition" loading="lazy" onclick="window.open(this.src, '_blank')">`;
+            } else {
+                bodyContent = `<p class="text-sm md:text-base leading-relaxed text-gray-700 dark:text-white/90 whitespace-pre-line break-words">${escapeHtml(msg.body || '')}</p>`;
+            }
+
+            const messageEl = document.createElement('div');
+            messageEl.className = 'group relative flex gap-3 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors message-enter';
+            messageEl.dataset.messageId = msg.id;
+            
+            // Blue name style for own messages
+            const nameStyle = isOwnMessage ? 'style="color: #2563eb;"' : '';
+            
+            messageEl.innerHTML = `
+                <!-- Message Actions (hover) -->
+                <div class="absolute -top-3 right-2 hidden group-hover:flex items-center gap-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1a1a2e] shadow-lg px-1 py-0.5 z-20">
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 transition" data-action="react" title="Add reaction">
+                        <i class="bi bi-emoji-smile text-lg"></i>
+                    </button>
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 transition" data-action="pin" title="Pin message">
+                        <i class="bi bi-pin-angle text-lg"></i>
+                    </button>
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 transition" data-action="forward" title="Forward">
+                        <i class="bi bi-forward text-lg"></i>
+                    </button>
+                    ${!isOwnMessage ? `
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/20 text-gray-500 dark:text-white/60 hover:text-red-500 transition" data-action="report" title="Report">
+                        <i class="bi bi-flag text-lg"></i>
+                    </button>
+                    ` : ''}
+                </div>
+                <img src="${avatar}" class="size-10 flex-shrink-0 rounded-full object-cover" alt="${escapeHtml(userName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=1a1a2e&color=fff&bold=true'">
+                <div class="flex flex-1 flex-col gap-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <p class="text-sm md:text-base font-bold" ${nameStyle}>${escapeHtml(msg.user?.name || 'Unknown User')}</p>
+                        <p class="text-xs md:text-sm text-gray-500 dark:text-[#9d9db9]">${timestamp}</p>
+                    </div>
+                    ${bodyContent}
+                </div>
+            `;
+
+            // Remove empty state if present
+            const emptyState = messagesContainer.querySelector('.border-dashed');
+            if (emptyState) emptyState.remove();
+
+            messagesContainer.appendChild(messageEl);
+            
+            // Check if user is near bottom - if so, auto-scroll; otherwise show indicator
+            const scrollContainer = document.getElementById('messages-scroll-container');
+            if (scrollContainer) {
+                const isNearBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 150;
+                if (isNearBottom) {
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                } else {
+                    // User is scrolled up - show new messages indicator
+                    showNewMessagesIndicator();
+                }
+            }
+        }
+
+        // Show typing indicator
+        function showTypingIndicator(name) {
+            const typingEl = document.getElementById('typing-indicator');
+            const typingText = document.getElementById('typing-indicator-text');
+            
+            if (!typingEl) return;
+            
+            if (typingText) {
+                typingText.textContent = `${name} is typing...`;
+            }
+            typingEl.style.display = 'flex';
+            typingEl.classList.remove('hidden');
+
+            if (typingTimeoutId) clearTimeout(typingTimeoutId);
+            typingTimeoutId = setTimeout(() => {
+                typingEl.style.display = 'none';
+                typingEl.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Send typing ping
+        function sendTypingPing() {
+            if (!currentConversationId) return;
+
+            const now = Date.now();
+            if (now - lastTypingSentAt < 1000) return;
+            lastTypingSentAt = now;
+
+            fetch(`/chats/${currentConversationId}/typing`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            }).catch(() => {});
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // New messages indicator functionality
+        let newMessagesCount = 0;
+        
+        function showNewMessagesIndicator() {
+            const indicator = document.getElementById('new-messages-indicator');
+            const textEl = document.getElementById('new-messages-text');
+            if (!indicator) return;
+            
+            newMessagesCount++;
+            if (textEl) {
+                textEl.textContent = newMessagesCount === 1 
+                    ? 'New message' 
+                    : `${newMessagesCount} new messages`;
+            }
+            indicator.classList.remove('hidden');
+        }
+        
+        function hideNewMessagesIndicator() {
+            const indicator = document.getElementById('new-messages-indicator');
+            if (indicator) {
+                indicator.classList.add('hidden');
+            }
+            newMessagesCount = 0;
+        }
+        
+        function scrollToBottom() {
+            const scrollContainer = document.getElementById('messages-scroll-container');
+            if (scrollContainer) {
+                scrollContainer.scrollTo({
+                    top: scrollContainer.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }
+            hideNewMessagesIndicator();
+        }
+        
+        // Initialize scroll detection and click handler
+        document.addEventListener('DOMContentLoaded', () => {
+            const scrollContainer = document.getElementById('messages-scroll-container');
+            const scrollBtn = document.getElementById('scroll-to-bottom-btn');
+            
+            // Click handler for the indicator button
+            scrollBtn?.addEventListener('click', scrollToBottom);
+            
+            // Hide indicator when user scrolls to bottom
+            scrollContainer?.addEventListener('scroll', () => {
+                const isNearBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 150;
+                if (isNearBottom && newMessagesCount > 0) {
+                    hideNewMessagesIndicator();
+                }
+            });
+            
+            // Initial scroll to bottom (with delay to ensure content is rendered)
+            if (scrollContainer) {
+                // Immediate scroll
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                // Also scroll after a short delay for images/content to load
+                setTimeout(() => {
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                }, 100);
+                setTimeout(() => {
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                }, 500);
+            }
+        });
+
+        // Handle real-time reaction updates
+        function handleRealtimeReaction(messageId, emoji, action, userName) {
+            const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (!messageEl) return;
+
+            let reactionsDiv = messageEl.querySelector('.reactions-container');
+            
+            if (action === 'added') {
+                // Create reactions container if it doesn't exist
+                if (!reactionsDiv) {
+                    reactionsDiv = document.createElement('div');
+                    reactionsDiv.className = 'reactions-container flex flex-wrap gap-1 mt-1';
+                    const bodyEl = messageEl.querySelector('.whitespace-pre-line');
+                    bodyEl?.parentElement?.insertBefore(reactionsDiv, bodyEl.nextSibling);
+                }
+                
+                // Check if reaction already exists
+                let existingBtn = reactionsDiv.querySelector(`[data-reaction="${emoji}"]`);
+                if (existingBtn) {
+                    const countEl = existingBtn.querySelector('span:last-child');
+                    if (countEl) countEl.textContent = parseInt(countEl.textContent) + 1;
+                } else {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'reaction-btn inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition';
+                    btn.dataset.reaction = emoji;
+                    btn.title = userName;
+                    btn.innerHTML = `<span>${emoji}</span><span class="text-gray-600 dark:text-white/70">1</span>`;
+                    reactionsDiv.appendChild(btn);
+                }
+            } else if (action === 'removed' && reactionsDiv) {
+                const existingBtn = reactionsDiv.querySelector(`[data-reaction="${emoji}"]`);
+                if (existingBtn) {
+                    const countEl = existingBtn.querySelector('span:last-child');
+                    const count = parseInt(countEl?.textContent || '1');
+                    if (count <= 1) {
+                        existingBtn.remove();
+                        // Remove container if empty
+                        if (reactionsDiv.children.length === 0) {
+                            reactionsDiv.remove();
+                        }
+                    } else {
+                        countEl.textContent = count - 1;
+                    }
+                }
+            }
+        }
+
+        // Mark conversation as read when viewing it
+        function markConversationAsRead(conversationId) {
+            if (!conversationId) return;
+            
+            fetch(`/chats/${conversationId}/read`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    console.log('[Read] Marked conversation as read:', conversationId);
+                    // Update local badge to 0
+                    updateUnreadBadge(conversationId, 0);
+                }
+            }).catch(err => console.error('[Read] Error:', err));
+        }
+
+        // Initialize Echo when ready
+        onEchoReady((Echo) => {
+            console.log('[Echo] Ready');
+
+            // Join current conversation channel if one is selected
+            if (currentConversationId) {
+                joinConversationChannel(currentConversationId);
+                // Mark as read when page loads with a conversation
+                markConversationAsRead(currentConversationId);
+            }
+
+            // Subscribe to per-user sidebar events (new conversations, updates)
+            console.log('[Echo] Subscribing to user channel: users.' + authUserId);
+            Echo.private(`users.${authUserId}`)
+                .listen('.conversation.updated', (e) => {
+                    console.log('[Echo] Conversation updated event received:', e);
+                    console.log('[Echo] unread_count:', e.unread_count, 'last_message:', e.last_message);
+                    // Update unread badge in sidemenu
+                    if (e.conversation_id && typeof e.unread_count !== 'undefined') {
+                        updateUnreadBadge(e.conversation_id, e.unread_count);
+                    }
+                    // Update DM list with new message preview
+                    if (e.conversation_id && e.last_message) {
+                        updateDmListItem(e.conversation_id, e.last_message, e.title);
+                    }
+                });
+
+            // Join presence channel for real-time online status
+            Echo.join('chat.presence')
+                .here((users) => {
+                    console.log('[Presence] Users online:', users);
+                    users.forEach(user => updateUserPresenceUI(user.id, 'online'));
+                })
+                .joining((user) => {
+                    console.log('[Presence] User joined:', user);
+                    updateUserPresenceUI(user.id, 'online');
+                })
+                .leaving((user) => {
+                    console.log('[Presence] User left:', user);
+                    updateUserPresenceUI(user.id, 'offline');
+                })
+                .listen('.presence.changed', (e) => {
+                    console.log('[Presence] Status changed:', e);
+                    updateUserPresenceUI(e.user_id, e.status);
+                });
+        });
+
+        // Update unread badge in sidemenu
+        function updateUnreadBadge(conversationId, unreadCount) {
+            console.log('[Unread] updateUnreadBadge called:', conversationId, unreadCount);
+            
+            // Find the server/conversation item in sidemenu (for groups)
+            const serverItem = document.querySelector(`[data-conversation-id="${conversationId}"]`);
+            if (serverItem) {
+                let badge = serverItem.querySelector('.unread-badge');
+                
+                if (unreadCount > 0) {
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.className = 'unread-badge absolute -bottom-1 -right-1 flex min-w-[1.4rem] items-center justify-center rounded-full border border-sidemenu-light dark:border-[#090911] bg-red-500 px-1 text-[11px] font-semibold leading-none text-white';
+                        serverItem.appendChild(badge);
+                    }
+                    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                } else if (badge) {
+                    badge.remove();
+                }
+                
+                // Move server to top of sidemenu (most recent activity)
+                moveServerToTop(conversationId);
+            }
+
+            // Also update DM list badge if it's a DM
+            const dmItem = document.querySelector(`[data-dm-conversation-id="${conversationId}"]`);
+            console.log('[Unread] Looking for DM item with conversation ID:', conversationId);
+            console.log('[Unread] Found dmItem:', dmItem);
+            if (dmItem) {
+                console.log('[Unread] Updating DM badge for conversation:', conversationId, 'count:', unreadCount);
+                let dmBadge = dmItem.querySelector('.dm-unread-badge');
+                if (unreadCount > 0) {
+                    if (!dmBadge) {
+                        dmBadge = document.createElement('span');
+                        dmBadge.className = 'dm-unread-badge ml-auto flex min-w-[1.2rem] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white';
+                        // Insert badge at the end of the flex container (after the text div)
+                        dmItem.appendChild(dmBadge);
+                    }
+                    dmBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    dmBadge.style.display = 'flex'; // Ensure it's visible
+                    console.log('[Unread] Badge updated:', dmBadge.textContent);
+                } else if (dmBadge) {
+                    dmBadge.remove();
+                    console.log('[Unread] Badge removed');
+                }
+            } else {
+                console.log('[Unread] DM item not found for conversation:', conversationId);
+                // Debug: list all DM items
+                document.querySelectorAll('[data-dm-conversation-id]').forEach(el => {
+                    console.log('[Unread] Available DM:', el.getAttribute('data-dm-conversation-id'));
+                });
+            }
+        }
+
+        // Move server to top of sidemenu (most recent activity first)
+        function moveServerToTop(conversationId) {
+            const serverItem = document.querySelector(`.chat-v2-sidemenu [data-conversation-id="${conversationId}"]`);
+            if (!serverItem) return;
+            
+            const serversContainer = serverItem.parentElement;
+            if (!serversContainer) return;
+            
+            // Get all server links (not buttons like create-group or view-all)
+            const serverLinks = serversContainer.querySelectorAll('a[data-conversation-id]');
+            if (serverLinks.length === 0) return;
+            
+            const firstServer = serverLinks[0];
+            
+            // Don't move if already at top
+            if (firstServer === serverItem) return;
+            
+            // Move to top with animation
+            serverItem.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+            serverItem.style.transform = 'scale(1.1)';
+            serverItem.style.opacity = '0.7';
+            
+            setTimeout(() => {
+                serversContainer.insertBefore(serverItem, firstServer);
+                serverItem.style.transform = 'scale(1)';
+                serverItem.style.opacity = '1';
+                
+                // Add pulse animation to indicate new activity
+                serverItem.classList.add('animate-pulse');
+                setTimeout(() => {
+                    serverItem.classList.remove('animate-pulse');
+                    serverItem.style.transition = '';
+                }, 1000);
+            }, 150);
+            
+            console.log('[Sidemenu] Moved server to top:', conversationId);
+        }
+
+        // Update DM list item with new message preview and move to top
+        function updateDmListItem(conversationId, lastMessage, title) {
+            const dmItem = document.querySelector(`[data-dm-conversation-id="${conversationId}"]`);
+            if (!dmItem) return;
+
+            // Update the subtitle/preview text
+            const subtitleEl = dmItem.querySelector('.truncate.text-xs');
+            if (subtitleEl) {
+                // Truncate message if too long
+                const preview = lastMessage.length > 30 ? lastMessage.substring(0, 30) + '...' : lastMessage;
+                subtitleEl.textContent = preview;
+            }
+
+            // Move the DM item to the top of the list
+            const dmList = dmItem.parentElement;
+            if (dmList && dmList.firstElementChild !== dmItem) {
+                dmList.insertBefore(dmItem, dmList.firstElementChild);
+                
+                // Add a subtle highlight animation
+                dmItem.classList.add('bg-primary/10');
+                setTimeout(() => {
+                    dmItem.classList.remove('bg-primary/10');
+                }, 2000);
+            }
+        }
+
+        // Update presence indicator in UI
+        function updateUserPresenceUI(userId, status) {
+            // Update all presence dots for this user
+            document.querySelectorAll(`[data-user-presence="${userId}"]`).forEach(dot => {
+                dot.className = dot.className.replace(/bg-(green|yellow|red|slate)-\d+/g, '');
+                if (status === 'online') {
+                    dot.classList.add('bg-green-500');
+                } else if (status === 'idle') {
+                    dot.classList.add('bg-yellow-400');
+                } else if (status === 'dnd') {
+                    dot.classList.add('bg-red-500');
+                } else {
+                    dot.classList.add('bg-slate-500');
+                }
+            });
+
+            // Update right column online/offline lists
+            const onlineList = document.getElementById('online-members-list');
+            const offlineList = document.getElementById('offline-members-list');
+            const onlineCount = document.getElementById('online-count');
+            const offlineCount = document.getElementById('offline-count');
+            
+            if (onlineList && offlineList) {
+                const memberItem = document.querySelector(`.chat-v2-right .member-item[data-user-id="${userId}"]`);
+                if (!memberItem) return;
+
+                const isOnline = ['online', 'idle', 'dnd'].includes(status);
+                const currentlyInOnline = onlineList.contains(memberItem);
+                const currentlyInOffline = offlineList.contains(memberItem);
+
+                // Update status text
+                const statusText = memberItem.querySelector('.member-status');
+                if (statusText) {
+                    statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                }
+
+                // Move between lists if needed
+                if (isOnline && currentlyInOffline) {
+                    memberItem.classList.remove('opacity-60');
+                    onlineList.appendChild(memberItem);
+                    // Update counts
+                    if (onlineCount) onlineCount.textContent = onlineList.querySelectorAll('.member-item').length;
+                    if (offlineCount) offlineCount.textContent = offlineList.querySelectorAll('.member-item').length;
+                } else if (!isOnline && currentlyInOnline) {
+                    memberItem.classList.add('opacity-60');
+                    offlineList.appendChild(memberItem);
+                    // Update counts
+                    if (onlineCount) onlineCount.textContent = onlineList.querySelectorAll('.member-item').length;
+                    if (offlineCount) offlineCount.textContent = offlineList.querySelectorAll('.member-item').length;
+                }
+            }
+        }
+
+        // ============================================================
+        // PRESENCE / ONLINE STATUS HEARTBEAT
+        // ============================================================
+        let heartbeatInterval = null;
+
+        function sendHeartbeat() {
+            fetch('/chats/presence/heartbeat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ platform: 'web' }),
+            }).catch(() => {});
+        }
+
+        // Start heartbeat on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Send initial heartbeat
+            sendHeartbeat();
+            
+            // Send heartbeat every 2 minutes
+            heartbeatInterval = setInterval(sendHeartbeat, 2 * 60 * 1000);
+        });
+
+        // Set offline when leaving page
+        window.addEventListener('beforeunload', () => {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            
+            // Use sendBeacon for reliable offline status
+            navigator.sendBeacon('/chats/presence/status', JSON.stringify({
+                status: 'offline',
+                _token: document.querySelector('meta[name="csrf-token"]')?.content || '',
+            }));
+        });
+
+        // Handle visibility change (tab hidden = idle)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                fetch('/chats/presence/status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({ status: 'idle' }),
+                }).catch(() => {});
+            } else {
+                sendHeartbeat();
+            }
+        });
+
+        // Send message function (supports video uploads)
+        async function sendMessage(conversationId, body, videoFile = null) {
+            if (!conversationId || (!body?.trim() && !videoFile)) return null;
+
+            try {
+                const formData = new FormData();
+                formData.append('body', body || '');
+                
+                if (videoFile) {
+                    formData.append('video', videoFile);
+                }
+
+                const response = await fetch(`/chats/${conversationId}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || 'Failed to send message');
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('[Chat] Send error:', error);
+                if (window.Swal) {
+                    Swal.fire({ icon: 'error', title: 'Error', text: error.message });
+                }
+                return null;
+            }
+        }
+
+        // Render outgoing message (optimistic UI) - make globally accessible
+        window.renderOutgoingMessage = function(body, messageId = null, type = 'text') {
+            const messagesContainer = document.getElementById('messages-container');
+            if (!messagesContainer) return;
+
+            const user = @json(auth()->user());
+            const userName = user?.name || 'You';
+            const avatar = user?.profile_photo_path
+                ? `/storage/${user.profile_photo_path}`
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=1a1a2e&color=fff&bold=true`;
+
+            const timestamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            
+            // Check if message is a GIF
+            const isGif = type === 'gif' || (body && body.startsWith('https://media.tenor.com'));
+            
+            // Build message body content
+            let bodyContent = '';
+            if (isGif) {
+                bodyContent = `<img src="${escapeHtml(body)}" alt="GIF" class="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition" loading="lazy" onclick="window.open(this.src, '_blank')">`;
+            } else {
+                bodyContent = `<p class="text-sm md:text-base leading-relaxed text-gray-700 dark:text-white/90 whitespace-pre-line break-words">${escapeHtml(body)}</p>`;
+            }
+
+            const messageEl = document.createElement('div');
+            messageEl.className = 'group relative flex gap-3 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors message-enter';
+            if (messageId) messageEl.dataset.messageId = messageId;
+            
+            messageEl.innerHTML = `
+                <!-- Message Actions (hover) -->
+                <div class="absolute -top-3 right-2 hidden group-hover:flex items-center gap-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1a1a2e] shadow-lg px-1 py-0.5 z-20">
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 transition" data-action="react" title="Add reaction">
+                        <i class="bi bi-emoji-smile text-lg"></i>
+                    </button>
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 transition" data-action="pin" title="Pin message">
+                        <i class="bi bi-pin-angle text-lg"></i>
+                    </button>
+                    <button type="button" class="msg-action-btn p-1.5 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 transition" data-action="forward" title="Forward">
+                        <i class="bi bi-forward text-lg"></i>
+                    </button>
+                </div>
+                <img src="${avatar}" class="size-10 flex-shrink-0 rounded-full object-cover" alt="${escapeHtml(userName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=1a1a2e&color=fff&bold=true'">
+                <div class="flex flex-1 flex-col gap-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <p class="text-sm md:text-base font-bold" style="color: #2563eb;">${escapeHtml(user?.name || 'You')}</p>
+                        <p class="text-xs md:text-sm text-gray-500 dark:text-[#9d9db9]">${timestamp}</p>
+                    </div>
+                    ${bodyContent}
+                </div>
+            `;
+
+            // Remove empty state if present
+            const emptyState = messagesContainer.querySelector('.border-dashed');
+            if (emptyState) emptyState.remove();
+
+            messagesContainer.appendChild(messageEl);
+            
+            // Scroll the container to bottom
+            const scrollContainer = document.getElementById('messages-scroll-container');
+            if (scrollContainer) {
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            }
+            
+            return messageEl;
+        }
+
+        // Attach typing listener and form submit to composer
+        document.addEventListener('DOMContentLoaded', () => {
+            const composerInput = document.querySelector('#chat-v2-message-input');
+            const chatForm = document.querySelector('#chat-v2-form');
+
+            if (composerInput) {
+                composerInput.addEventListener('input', sendTypingPing);
+            }
+
+            if (chatForm) {
+                chatForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+
+                    const input = chatForm.querySelector('#chat-v2-message-input');
+                    const body = input?.value?.trim();
+                    const conversationId = chatForm.dataset.conversationId;
+                    const videoFile = window.getSelectedVideoFile ? window.getSelectedVideoFile() : null;
+
+                    if ((!body && !videoFile) || !conversationId) return;
+
+                    // Clear input immediately
+                    input.value = '';
+
+                    // Optimistic UI - show message right away (for text only)
+                    let tempEl = null;
+                    if (body && !videoFile) {
+                        tempEl = renderOutgoingMessage(body);
+                    } else if (videoFile) {
+                        // Show uploading indicator for video
+                        tempEl = renderOutgoingMessage(body || 'Uploading video...', null, 'video');
+                    }
+
+                    // Send to server (with video if present)
+                    const result = await sendMessage(conversationId, body, videoFile);
+                    
+                    // Clear video preview after send
+                    if (window.clearSelectedVideo) window.clearSelectedVideo();
+
+                    if (result && result.message) {
+                        const msg = result.message;
+                        if (tempEl) {
+                            tempEl.dataset.messageId = msg.id;
+                            // If video was uploaded, update the message to show the video
+                            if (videoFile && msg.attachments?.length > 0) {
+                                const attachment = msg.attachments[0];
+                                const videoUrl = `/storage/${attachment.path}`;
+                                tempEl.querySelector('.flex-1').innerHTML = `
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        <p class="text-sm md:text-base font-bold " style="color: #2563eb;">${escapeHtml(msg.user?.name || 'You')}</p>
+                                        <p class="text-xs md:text-sm text-gray-500 dark:text-[#9d9db9]">${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+                                    </div>
+                                    ${body ? `<p class="text-sm md:text-base leading-relaxed text-gray-700 dark:text-white/90 whitespace-pre-line break-words">${escapeHtml(body)}</p>` : ''}
+                                    <div class="max-w-lg mt-2">
+                                        <div class="relative rounded-xl overflow-hidden bg-black">
+                                            <video src="${videoUrl}" class="w-full max-h-80 object-contain" controls preload="metadata"></video>
+                                        </div>
+                                        <div class="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-white/50">
+                                            <i class="bi bi-camera-video-fill text-purple-500"></i>
+                                            <span class="truncate">${escapeHtml(attachment.original_name || 'Video')}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }
+                    } else if (!result) {
+                        console.error('[Chat] Message may not have been sent');
+                        // Optionally mark the message as failed
+                        tempEl?.classList.add('opacity-50');
+                    }
+                });
+
+                // Enter to send
+                composerInput?.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        chatForm.dispatchEvent(new Event('submit'));
+                    }
+                });
+            }
+        });
+    </script>
+
+    {{-- Message animation styles --}}
+    <style>
+        @keyframes messageEnter {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .message-enter {
+            animation: messageEnter 0.2s ease-out;
+        }
+    </style>
+
+    {{-- Message Actions Script --}}
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const messagesContainer = document.getElementById('messages-container');
+        if (!messagesContainer) return;
+
+        const openModal = (name) => {
+            const modal = document.querySelector(`[data-chat-modal="${name}"]`);
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.classList.add('chat-modal-open');
+        };
+
+        // Handle message action buttons
+        messagesContainer.addEventListener('click', (e) => {
+            const actionBtn = e.target.closest('.msg-action-btn');
+            if (!actionBtn) return;
+
+            const messageEl = actionBtn.closest('[data-message-id]');
+            const messageId = messageEl?.dataset.messageId;
+            const action = actionBtn.dataset.action;
+            const messageBody = messageEl?.querySelector('p.whitespace-pre-line')?.textContent?.trim() || '';
+            const messageUser = messageEl?.querySelector('.font-bold')?.textContent?.trim() || '';
+
+            if (!messageId) return;
+
+            switch (action) {
+                case 'react':
+                    document.getElementById('reaction-message-id').value = messageId;
+                    openModal('reactions');
+                    break;
+
+                case 'pin':
+                    pinMessage(messageId);
+                    break;
+
+                case 'forward':
+                    document.getElementById('forward-message-id').value = messageId;
+                    document.getElementById('forward-message-body').textContent = messageBody;
+                    openModal('forward');
+                    break;
+
+                case 'report':
+                    document.getElementById('report-message-id').value = messageId;
+                    document.getElementById('report-message-body').textContent = messageBody;
+                    document.getElementById('report-message-user').textContent = `From: ${messageUser}`;
+                    openModal('report');
+                    break;
+
+                case 'more':
+                    // Toggle moderator dropdown
+                    const dropdown = messageEl.querySelector('.msg-more-dropdown');
+                    if (dropdown) {
+                        // Close all other dropdowns first
+                        document.querySelectorAll('.msg-more-dropdown').forEach(d => {
+                            if (d !== dropdown) d.classList.add('hidden');
+                        });
+                        dropdown.classList.toggle('hidden');
+                    }
+                    break;
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('[data-action="more"]') && !e.target.closest('.msg-more-dropdown')) {
+                document.querySelectorAll('.msg-more-dropdown').forEach(d => d.classList.add('hidden'));
+            }
+        });
+
+        // Handle moderator actions
+        messagesContainer.addEventListener('click', async (e) => {
+            const modBtn = e.target.closest('.mod-action-btn');
+            if (!modBtn) return;
+
+            const dropdown = modBtn.closest('.msg-more-dropdown');
+            const action = modBtn.dataset.modAction;
+            const messageId = dropdown?.dataset.messageId;
+            const userId = dropdown?.dataset.userId;
+            const userName = dropdown?.dataset.userName;
+            const conversationId = dropdown?.dataset.conversationId;
+
+            // Hide dropdown
+            dropdown?.classList.add('hidden');
+
+            if (!messageId || !userId) return;
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+            switch (action) {
+                case 'mute':
+                    // Show mute duration options
+                    const { value: duration } = await Swal.fire({
+                        title: `Mute ${userName}`,
+                        icon: 'warning',
+                        html: `
+                            <div class="text-left space-y-2">
+                                <label class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-100">
+                                    <input type="radio" name="mute_duration" value="1" class="text-primary">
+                                    <span>1 Hour</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-100">
+                                    <input type="radio" name="mute_duration" value="24" class="text-primary">
+                                    <span>24 Hours</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-100">
+                                    <input type="radio" name="mute_duration" value="168" class="text-primary">
+                                    <span>7 Days</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-100">
+                                    <input type="radio" name="mute_duration" value="0" class="text-primary" checked>
+                                    <span>Until manually unmuted</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-gray-100">
+                                    <input type="radio" name="mute_duration" value="custom" class="text-primary">
+                                    <span>Custom (hours):</span>
+                                    <input type="number" id="custom_hours" min="1" max="8760" class="w-20 px-2 py-1 border rounded text-sm" placeholder="Hours">
+                                </label>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Mute User',
+                        confirmButtonColor: '#f59e0b',
+                        preConfirm: () => {
+                            const selected = document.querySelector('input[name="mute_duration"]:checked')?.value;
+                            if (selected === 'custom') {
+                                const customHours = document.getElementById('custom_hours')?.value;
+                                return customHours ? parseInt(customHours) : null;
+                            }
+                            return selected ? parseInt(selected) : null;
+                        }
+                    });
+
+                    if (duration !== undefined && duration !== null) {
+                        try {
+                            const response = await fetch(`/chats/manage/mute-user`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken,
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({
+                                    user_id: userId,
+                                    conversation_id: conversationId,
+                                    duration_hours: duration
+                                }),
+                            });
+
+                            if (response.ok) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'User Muted',
+                                    text: duration === 0 ? `${userName} has been muted indefinitely.` : `${userName} has been muted for ${duration} hour(s).`,
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                });
+                            } else {
+                                const err = await response.json();
+                                throw new Error(err.message || 'Failed to mute user');
+                            }
+                        } catch (error) {
+                            Swal.fire({ icon: 'error', title: 'Error', text: error.message });
+                        }
+                    }
+                    break;
+
+                case 'kick':
+                    const kickConfirm = await Swal.fire({
+                        title: `Kick ${userName}?`,
+                        text: 'This will remove them from this conversation immediately.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Kick User',
+                        confirmButtonColor: '#f97316',
+                    });
+
+                    if (kickConfirm.isConfirmed) {
+                        try {
+                            const response = await fetch(`/chats/manage/kick-user`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken,
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({
+                                    user_id: userId,
+                                    conversation_id: conversationId
+                                }),
+                            });
+
+                            if (response.ok) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'User Kicked',
+                                    text: `${userName} has been removed from this conversation.`,
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                });
+                            } else {
+                                const err = await response.json();
+                                throw new Error(err.message || 'Failed to kick user');
+                            }
+                        } catch (error) {
+                            Swal.fire({ icon: 'error', title: 'Error', text: error.message });
+                        }
+                    }
+                    break;
+
+                case 'delete':
+                    const deleteConfirm = await Swal.fire({
+                        title: 'Delete this message?',
+                        text: 'Users will see "A moderator removed this message" instead.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Delete Message',
+                        confirmButtonColor: '#ef4444',
+                    });
+
+                    if (deleteConfirm.isConfirmed) {
+                        try {
+                            const response = await fetch(`/chats/manage/delete-message`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken,
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({ message_id: messageId }),
+                            });
+
+                            if (response.ok) {
+                                // Replace message content with "removed" notice
+                                const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+                                if (messageEl) {
+                                    const bodyEl = messageEl.querySelector('.whitespace-pre-line');
+                                    if (bodyEl) {
+                                        bodyEl.innerHTML = '<span class="italic text-gray-400 dark:text-white/40">A moderator removed this message</span>';
+                                    }
+                                    // Also hide any attachments
+                                    const attachments = messageEl.querySelector('.grid.gap-2');
+                                    if (attachments) attachments.remove();
+                                }
+
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Message Deleted',
+                                    timer: 1500,
+                                    showConfirmButton: false,
+                                });
+                            } else {
+                                const err = await response.json();
+                                throw new Error(err.message || 'Failed to delete message');
+                            }
+                        } catch (error) {
+                            Swal.fire({ icon: 'error', title: 'Error', text: error.message });
+                        }
+                    }
+                    break;
+            }
+        });
+
+        // Handle reaction button clicks on existing reactions
+        messagesContainer.addEventListener('click', (e) => {
+            const reactionBtn = e.target.closest('.reaction-btn');
+            if (!reactionBtn) return;
+
+            const messageEl = reactionBtn.closest('[data-message-id]');
+            const messageId = messageEl?.dataset.messageId;
+            const emoji = reactionBtn.dataset.reaction;
+
+            if (messageId && emoji) {
+                toggleReaction(messageId, emoji);
+            }
+        });
+
+        async function pinMessage(messageId) {
+            try {
+                const response = await fetch(`/chats/messages/${messageId}/pin`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (response.ok) {
+                    window.Swal?.fire({
+                        icon: 'success',
+                        title: 'Message pinned',
+                        timer: 1500,
+                        showConfirmButton: false,
+                    }) ?? alert('Message pinned!');
+                }
+            } catch (error) {
+                console.error('Pin error:', error);
+            }
+        }
+
+        async function toggleReaction(messageId, emoji) {
+            const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+            const reactionBtn = messageEl?.querySelector(`.reaction-btn[data-reaction="${emoji}"]`);
+            
+            try {
+                // Check if user already reacted - toggle off
+                const method = reactionBtn ? 'DELETE' : 'POST';
+                
+                const response = await fetch(`/chats/messages/${messageId}/react`, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({ reaction: emoji }),
+                });
+
+                if (response.ok) {
+                    // Update UI without reload
+                    if (reactionBtn) {
+                        const countEl = reactionBtn.querySelector('span:last-child');
+                        const count = parseInt(countEl?.textContent || '1');
+                        if (count <= 1) {
+                            reactionBtn.remove();
+                        } else {
+                            countEl.textContent = count - 1;
+                        }
+                    } else {
+                        // Add new reaction
+                        let reactionsDiv = messageEl?.querySelector('.reactions-container');
+                        if (!reactionsDiv) {
+                            reactionsDiv = document.createElement('div');
+                            reactionsDiv.className = 'reactions-container flex flex-wrap gap-1 mt-1';
+                            const bodyEl = messageEl?.querySelector('.whitespace-pre-line');
+                            bodyEl?.parentElement?.insertBefore(reactionsDiv, bodyEl.nextSibling);
+                        }
+                        
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'reaction-btn inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition';
+                        btn.dataset.reaction = emoji;
+                        btn.innerHTML = `<span>${emoji}</span><span class="text-gray-600 dark:text-white/70">1</span>`;
+                        reactionsDiv.appendChild(btn);
+                    }
+                }
+            } catch (error) {
+                console.error('Reaction error:', error);
+            }
+        }
+    });
+    </script>
+</x-chat-v2-layout>
+

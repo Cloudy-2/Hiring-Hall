@@ -1,0 +1,15 @@
+vendor/
+node_modules/
+public/
+storage/
+bootstrap/cache/
+*.sql
+*.csv
+.env*
+db_hiring_hillbcs.sql
+14_20_commit_hire.csv
+21_27_commit_hire.csv
+7_13_commit_hire.csv
+REFINEMENT_SUMMARY.txt
+Registration of Company .md
+as $topic) {
